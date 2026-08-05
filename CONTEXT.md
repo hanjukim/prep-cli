@@ -399,8 +399,15 @@ account. Enter takes both, so the run that follows a login needs no typing at
 all. Asking still needs a terminal, so a run without one stops and names the two
 commands instead. A run that names no project never reaches the step, and its
 closing message names the same two commands rather than asking — the machine-only
-ending is where that run reads what is left for it (docs/adr/0021). The
-second thing is the GitHub login above. The third is the Claude Code login: the
+ending is where that run reads what is left for it (docs/adr/0021). The second
+thing is the GitHub login above — sent away for mid-run on the project branch,
+and named on the machine-only ending when gh carries none. That run needed no
+account and the work after it does: this script is served from GitHub, and the
+guidance prep writes sends its agents to a GitHub tracker they reach through gh.
+Named there it stops nothing, since the run has already
+finished, and it is printed ahead of the two identity commands — the order the
+project branch runs the pair in — because a login is what turns those commands
+into answers somebody can be offered. The third is the Claude Code login: the
 first `claude` run authenticates through a browser, which the script cannot do
 for anybody. The script's closing message is where that is said, and it is said
 nowhere else: whoever ran the one-liner is looking at that terminal, not at a

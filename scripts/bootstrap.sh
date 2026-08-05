@@ -1051,6 +1051,29 @@ else
   printf '\nThis machine is ready. No project was named, so nothing was cloned\n'
   printf 'and nothing was set up.\n'
 
+  # gh is installed here and logged in to nothing, because this run cloned
+  # nothing that needed an account (docs/adr/0021). The work this machine is for
+  # does need one: this script is served from GitHub, and the guidance prep
+  # writes points its agents at a GitHub tracker they reach through gh. So the
+  # login is named here rather than left to be discovered at the first `gh issue
+  # list` that refuses. It is named rather than run for the reason the project
+  # step names it too — the login reads the terminal itself, and this script is
+  # reading a pipe.
+  #
+  # It comes before the identity below, the same order the project branch runs
+  # them in, because it is what turns the two commands below into answers
+  # somebody can be offered.
+  if ! gh auth status >/dev/null 2>&1; then
+    printf '\ngh is installed and logged in to nothing. This run needed no account,\n'
+    printf 'and the work after it will: cloning anything private, opening an issue,\n'
+    printf 'pushing a branch. Log in when it suits you:\n'
+    printf '  %s auth login --git-protocol https --web\n' "$GH_BIN"
+    printf 'The path is written out in full because this terminal has not read a\n'
+    printf 'shell rc since gh was installed. A new terminal carries it by name.\n'
+    printf 'It prints a one-time code. If no browser opens, open\n'
+    printf 'https://github.com/login/device in any browser and enter the code there.\n'
+  fi
+
   # The identity sits behind the GitHub login, and both belong to the project
   # branch this run did not take (docs/adr/0021). So it is named here rather
   # than asked for — this is where a run that stops at the machine reads what is
@@ -1062,8 +1085,8 @@ else
     printf 'needs both. Set them yourself:\n'
     printf '  git config --global user.name "Your Name"\n'
     printf '  git config --global user.email "you@example.com"\n'
-    printf 'Or leave them — the run that names a project asks GitHub and offers\n'
-    printf 'you the answers.\n'
+    printf 'Or leave them — log in above, run this again with a project, and it\n'
+    printf 'asks GitHub and offers you both answers.\n'
   fi
 
   if have_tty; then
