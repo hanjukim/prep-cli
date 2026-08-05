@@ -86,6 +86,12 @@ NODE_DIST="https://nodejs.org/dist/${NODE_VERSION}"
 GH_VERSION="2.97.0"
 GH_DIST="https://github.com/cli/cli/releases/download/v${GH_VERSION}"
 
+# Where bun installs, which is also where bun's `link` puts prep in step 7. It
+# is settled here rather than at step 3 because the messages this script hands
+# back name the directory, and one of them is printed by a run that stops before
+# step 3 ever runs.
+BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
+
 # The step being run, so a failure can say where it stopped.
 STEP="start"
 
@@ -286,6 +292,24 @@ persist_on_path() {
   [ -z "${written:-}" ] || printf 'Put %s on PATH in %s.\n' "$dir" "$written"
 }
 
+# The one line that gives the terminal this script ran in the tools it installed.
+#
+# A rc file is read when a shell starts, and the shell reading this script
+# started before any of these tools existed. So the rc lines `persist_on_path`
+# writes reach every terminal except the one a person is looking at — and that
+# is the terminal they are standing in when the script stops at the GitHub login
+# and when it finishes. Telling them to open a new one is right and it is not
+# enough: the stop at step 9 asks for work in this terminal, and a machine-ready
+# ending names `prep doctor` for it (docs/adr/0024).
+#
+# Both directories go in, and in the order this run put them there, because a
+# person pasting one line should not have to know which tool came from which
+# installer. The paths are written out rather than left as `$HOME`, since this
+# is pasted into a shell that may be neither bash nor the one that ran it.
+path_line() {
+  printf 'export PATH="%s:%s:$PATH"' "$HOME/.local/bin" "$BUN_INSTALL/bin"
+}
+
 # owner/repo out of a GitHub clone URL. A URL pointing anywhere else returns
 # non-zero, and the caller leaves that repository to git.
 github_slug() {
@@ -365,13 +389,19 @@ cannot hand to you.
 
 Run this yourself, then run this script again:
   $GH_BIN auth login --git-protocol https --web
+  curl -fsSL $SCRIPT_URL | bash
 
-It is written out in full because this terminal has not read a shell rc since gh
-was installed, so a plain \`gh\` here would not be found. A new terminal carries
-it by name.
+gh is written out in full because this terminal has not read a shell rc since it
+was installed, so a plain \`gh\` here would not be found. That holds for
+everything this script installed — prep, claude, node. One line gives this
+terminal all of them, and then the plain names work here too:
+  $(path_line)
 
-It prints a one-time code. If no browser opens, open https://github.com/login/device
-in any browser you can reach and enter the code there.
+A terminal opened after this run needs none of that.
+
+The login prints a one-time code. If no browser opens, open
+https://github.com/login/device in any browser you can reach and enter the code
+there.
 
 Everything installed so far stays installed, and the second run skips it."
   fi
@@ -542,8 +572,16 @@ fi
 
 # The installer writes a shell rc, which only the next shell reads. This run
 # needs bun now, so PATH is amended here as well.
-export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
+export BUN_INSTALL
 export PATH="$BUN_INSTALL/bin:$PATH"
+
+# bun's installer writes a rc of its own, and this writes one as well. It is not
+# a duplicate of it in any way that costs: bun writes `$BUN_INSTALL/bin`, this
+# writes the directory that expands to, so neither line finds the other and the
+# guard in each keeps a shell reading both from carrying the directory twice.
+# What it buys is that the directory holding prep no longer depends on another
+# vendor's installer having identified this machine's shell (docs/adr/0024).
+persist_on_path "$BUN_INSTALL/bin"
 
 have bun || fail "bun is installed but not on PATH. Expected it in $BUN_INSTALL/bin"
 bun --version
@@ -821,17 +859,24 @@ printf '\n==> Done\n'
 
 # A script cannot move the shell that called it, so the lines that finish the
 # job are printed rather than run. They are given in full, ready to paste.
+#
+# This terminal is the one shell no rc file this run wrote will ever reach, and
+# every line below names a tool by a name it does not know yet. So the line that
+# fixes it comes first, before any of them (docs/adr/0024).
+printf '\nThis terminal started before any of these tools existed, so it does not\n'
+printf 'carry them yet. Either open a new one, or give this one the names:\n'
+printf '  %s\n' "$(path_line)"
+
 if [ "$PROJECT_READY" -eq 1 ]; then
-  printf 'Your project is at %s\n' "$PROJECT_DIR"
-  printf '\nStart working — open a new terminal, so it carries the tools this\n'
-  printf 'script installed, and run these two lines:\n'
+  printf '\nYour project is at %s\n' "$PROJECT_DIR"
+  printf '\nStart working — run these two lines:\n'
   printf '  cd %s\n' "$PROJECT_DIR"
   printf '  claude\n'
 else
   # The machine is finished and the project is the only thing outstanding, so
   # the line that comes back for it is the one worth printing. Everything
   # already installed is skipped on that second run.
-  printf 'This machine is ready. No project was named, so nothing was cloned\n'
+  printf '\nThis machine is ready. No project was named, so nothing was cloned\n'
   printf 'and nothing was set up.\n'
 
   # The identity sits behind the GitHub login, and both belong to the project

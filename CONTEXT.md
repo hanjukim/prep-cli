@@ -426,19 +426,30 @@ not carry — `~/.local/bin`, `~/.bun/bin`, `/opt/homebrew/bin`. The script expo
 each directory as it goes and confirms the binary by name before moving on, so a
 link that installed and cannot be found stops the run there (docs/adr/0013).
 
-Exporting covers this run only. bun's installer and Claude Code's each edit a
-shell rc on their own account; the two tarballs edit nothing, so `~/.local/bin`
-is the one directory nobody would have persisted — the directory Node and gh
-land in. The script writes it into every shell rc that is already there, and
-into `~/.profile` where none is, each line guarded so a directory already on
-PATH is not put on twice. That is what makes the new terminal at the end carry
-what this run installed.
+Exporting covers this run only. The two tarballs edit no rc at all, and the
+installers that do — bun's and Claude Code's — edit one when they can identify
+the shell, which is another vendor's judgement about this machine. So the script
+writes both directories it exports itself, `~/.local/bin` and `~/.bun/bin`, into
+every shell rc that is already there, and into `~/.profile` where none is, each
+line guarded so a directory already on PATH is not put on twice. bun's own line
+writes the directory through a variable and this one writes what it expands to,
+so neither finds the other and a shell reading both still carries it once. That
+is what makes the new terminal at the end carry what this run installed —
+`claude` and `prep` alike (docs/adr/0024).
 
 **The one terminal no rc file reaches is the one running the script.** It read
 its rc before any of this existed, so a command named for a person to run
 themselves is named by its full path — `$GH_BIN auth login`, not `gh auth login`.
-The login below is the one place that matters, since it is the only command the
-script hands back mid-run.
+That works for one command and does not carry: by the time somebody wants
+`prep doctor` or `claude` in that terminal, writing every name out in full is
+worse than handing the PATH over once. So the script prints the line that gives
+this terminal both directories, at the two places a run ends — the stop at
+step 9, where a person is asked to work in that terminal and never sees the
+closing message, and the top of the closing message itself, ahead of every line
+that names a tool. The stop at step 9 also names the `curl … | bash` that
+resumes the run, since it is the one handover asking for two commands. Opening a
+new terminal is still what is offered first: it is shorter and needs no paste
+(docs/adr/0024).
 
 **A tool this machine holds is one installed for this machine.** Every install
 is guarded by whether the binary is already there, and on WSL that question has
