@@ -102,7 +102,15 @@ three stood, and emitted one POSIX block. Three shells fall through that:
    anything named `.fish`, the `case` form for everything else — so the rc and
    the env file are both written by it, and `env_line` sends a fish shell to
    `env.fish` with the word fish uses to read one.
-8. **csh and tcsh get the POSIX line and no special case.** They would need a
+8. **The instruction is drawn, not printed.** It arrives at the end of a screen
+   of install output somebody has just watched scroll by, and it is the one line
+   in the run that decides whether the next command they type is found. So it
+   sits between two rules, with the command alone in reverse video —
+   `announce_env_line`. Emphasis is dropped where neither stream is a terminal,
+   because escape codes in a log are noise rather than emphasis, and where
+   `NO_COLOR` is set, because somebody who set it has already said so. stderr
+   counts as well as stdout: the stop at step 9 goes there.
+9. **csh and tcsh get the POSIX line and no special case.** They would need a
    third syntax (`setenv`) and a fourth set of rc files, and neither macOS nor
    Debian starts anybody on one. A guess written into a rc file is worse than a
    line somebody has to adapt, so this is written down rather than attempted.
@@ -158,6 +166,9 @@ three stood, and emitted one POSIX block. Three shells fall through that:
 - `~/.local/share/prep/env.sh` and `env.fish` are files this script owns. Every
   run rewrites them whole rather than appending, since each run knows all of
   what belongs in them.
+- This script prints escape codes now, where it printed none before. They are
+  confined to one function, and the tests hold that a run whose output is not a
+  terminal carries none of them.
 - `prep` is on PATH in a new terminal whether or not bun's installer identified
   the shell.
 - A rc file may carry two blocks for `~/.bun/bin`, one bun's and one this

@@ -98,6 +98,31 @@ BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
 # not $PREP_DIR, which is a git clone this would leave an untracked file in.
 PREP_SHARE="${PREP_SHARE:-$HOME/.local/share/prep}"
 
+# Emphasis, where there is a terminal to take it.
+#
+# This script prints one instruction a person has to act on — the file that
+# gives their terminal the tools — and it is printed among a screen of install
+# output they have just watched scroll by. Everything here exists to keep that
+# one thing from being scrolled past (docs/adr/0024).
+#
+# A run whose output is a file or a pipe gets none of it, because escape codes
+# in a log are noise rather than emphasis, and NO_COLOR is honoured because
+# somebody who set it has already said so. stderr counts as well as stdout: the
+# stop at step 9 goes there, and it is the message that matters most.
+BOLD=""
+REVERSE=""
+RESET=""
+if { [ -t 1 ] || [ -t 2 ]; } && [ -z "${NO_COLOR:-}" ]; then
+  BOLD="$(printf '\033[1m')"
+  REVERSE="$(printf '\033[7m')"
+  RESET="$(printf '\033[0m')"
+fi
+
+# The width of the rules the announcement is drawn between. Narrower than the
+# 80 columns the prose is wrapped to, so the block reads as a block rather than
+# as more of the same.
+RULE="────────────────────────────────────────────────────────────────────"
+
 # The step being run, so a failure can say where it stopped.
 STEP="start"
 
@@ -429,6 +454,23 @@ env_line() {
   esac
 }
 
+# The same line, drawn so nobody scrolls past it.
+#
+# It is the one instruction in this whole run that decides whether the next
+# command somebody types is found, and it arrives at the end of a screen of
+# install output. Rules above and below mark where the progress stops and the
+# instruction starts, and the command itself is the only thing on the screen in
+# reverse video.
+announce_env_line() {
+  printf '\n%s\n' "$RULE"
+  printf '%sThis terminal does not carry the tools this run installed.%s\n' "$BOLD" "$RESET"
+  printf 'It started before they existed, and a shell reads its rc once.\n'
+  printf '\n    %s %s %s\n\n' "$REVERSE$BOLD" "$(env_line)" "$RESET"
+  printf 'Run that line here — or open a new terminal, which carries them\n'
+  printf 'already.\n'
+  printf '%s\n' "$RULE"
+}
+
 # owner/repo out of a GitHub clone URL. A URL pointing anywhere else returns
 # non-zero, and the caller leaves that repository to git.
 github_slug() {
@@ -514,7 +556,8 @@ gh is written out in full because this terminal has not read a shell rc since it
 was installed, so a plain \`gh\` here would not be found. That holds for
 everything this script installed — prep, claude, node. Read this file and the
 plain names work here too:
-  $(env_line)
+
+    ${REVERSE}${BOLD} $(env_line) ${RESET}
 
 A terminal opened after this run needs none of that.
 
@@ -987,9 +1030,7 @@ printf '\n==> Done\n'
 # This terminal is the one shell no rc file this run wrote will ever reach, and
 # every line below names a tool by a name it does not know yet. So the line that
 # fixes it comes first, before any of them (docs/adr/0024).
-printf '\nThis terminal started before any of these tools existed, so it does not\n'
-printf 'carry them yet. Either open a new one, or read this file into it:\n'
-printf '  %s\n' "$(env_line)"
+announce_env_line
 
 if [ "$PROJECT_READY" -eq 1 ]; then
   printf '\nYour project is at %s\n' "$PROJECT_DIR"

@@ -465,6 +465,79 @@ env_line`,
   });
 });
 
+describe("announce_env_line", () => {
+  /** The script's own colour guard and rule, lifted whole rather than restated. */
+  const EMPHASIS = SCRIPT.slice(SCRIPT.indexOf('BOLD=""'), SCRIPT.indexOf("# The step being run"));
+
+  /**
+   * The block as it lands.
+   *
+   * Neither stream is a terminal under a test runner, which is the case a log
+   * or a `| tee` is in — so the guard runs for real and leaves the variables
+   * empty. `tty` sets afterwards what the guard would have set on a terminal,
+   * since a pty cannot be arranged from here.
+   */
+  function announce(tty: boolean, env: Record<string, string> = {}): string {
+    const home = mkdtempSync(join(tmpdir(), "prep-bootstrap-"));
+    const asTerminal = `BOLD="$(printf '\\033[1m')"
+REVERSE="$(printf '\\033[7m')"
+RESET="$(printf '\\033[0m')"`;
+
+    const result = Bun.spawnSync({
+      cmd: [
+        "bash",
+        "-c",
+        `set -Eeuo pipefail
+PREP_SHARE="$HOME/.local/share/prep"
+${EMPHASIS}
+${tty ? asTerminal : ""}
+${shellFunction("login_shell")}
+${shellFunction("env_line")}
+${shellFunction("announce_env_line")}
+announce_env_line`,
+      ],
+      env: { ...process.env, HOME: home, ...env },
+    });
+
+    if (result.exitCode !== 0) {
+      throw new Error(`announce_env_line failed: ${result.stderr.toString()}`);
+    }
+    return result.stdout.toString();
+  }
+
+  const ESC = "\u001b";
+
+  test("the line to run is in it, and it is the only command in it", () => {
+    const block = announce(false);
+    expect(block).toContain("/.local/share/prep/env.sh");
+    expect(block).toContain("open a new terminal");
+  });
+
+  test("rules mark where the install output stops and the instruction starts", () => {
+    const lines = announce(false).trim().split("\n");
+    expect(lines.at(0)).toStartWith("──");
+    expect(lines.at(-1)).toStartWith("──");
+  });
+
+  test("a terminal gets the emphasis, and the command carries the most of it", () => {
+    const block = announce(true);
+    // Reverse video, so the command reads as a highlighted bar rather than as
+    // one more line of output.
+    expect(block).toContain(`${ESC}[7m`);
+    expect(block).toContain(`${ESC}[1m`);
+  });
+
+  test("a log gets none of it, because escape codes in a file are noise", () => {
+    expect(announce(false)).not.toContain(ESC);
+  });
+
+  test("NO_COLOR is honoured, since somebody who set it has already said so", () => {
+    // The guard is read from the script itself here, so this covers the real
+    // condition rather than a copy of it.
+    expect(announce(false, { NO_COLOR: "1" })).not.toContain(ESC);
+  });
+});
+
 describe("the commands the script hands to a person", () => {
   test("the GitHub login is named by gh's own path, not by a name their shell may not carry", () => {
     // The person runs this in the terminal that ran the one-liner, and that
@@ -489,10 +562,10 @@ describe("the commands the script hands to a person", () => {
 
   test("the closing message hands this terminal its PATH before naming a tool", () => {
     const done = SCRIPT.slice(SCRIPT.indexOf("==> Done"));
-    expect(done).toContain('"$(env_line)"');
+    expect(done).toContain("announce_env_line");
     // Ahead of `cd`/`claude` and ahead of the second-run line, because every one
     // of them is a name this shell does not carry yet.
-    expect(done.indexOf('"$(env_line)"')).toBeLessThan(done.indexOf("claude\\n"));
+    expect(done.indexOf("announce_env_line")).toBeLessThan(done.indexOf("claude\\n"));
   });
 
   test("the file they are sent to read is written before any step can stop", () => {

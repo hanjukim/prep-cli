@@ -471,10 +471,13 @@ guarded blocks the rc files get. A path is shorter to type than the export line,
 is the same words on every machine, and can be read before it is trusted, which
 is the shape rustup, nvm and bun's own installers all landed on. The script
 prints the one line that reads it — `. …/env.sh` or `source …/env.fish` — at the
-two places a run ends — the stop at
-step 9, where a person is asked to work in that terminal and never sees the
-closing message, and the top of the closing message itself, ahead of every line
-that names a tool. The stop at step 9 also names the `curl … | bash` that
+two places a run ends, drawn between two rules with the command alone in reverse
+video, since it arrives at the end of a screen of install output and is the one
+line that decides whether the next command somebody types is found. A run whose
+output is a log rather than a terminal, and a run under `NO_COLOR`, get the same
+words without the escape codes. The two places are the stop at step 9, where a
+person is asked to work in that terminal and never sees the closing message, and
+the top of the closing message itself, ahead of every line that names a tool. The stop at step 9 also names the `curl … | bash` that
 resumes the run, since it is the one handover asking for two commands. Opening a
 new terminal is still what is offered first: it is shorter and needs no paste
 (docs/adr/0024).
