@@ -2,6 +2,10 @@
 #
 # The first thing a person runs (docs/adr/0009).
 #
+# The terms below are defined in CONTEXT.md beside this file. prep's own
+# vocabulary is the one at the repository root, and CONTEXT-MAP.md says which is
+# which.
+#
 #   curl -fsSL https://raw.githubusercontent.com/hanjukim/prep-cli/main/scripts/bootstrap.sh | bash
 #
 # The line takes nothing after it. The repository the person came here to work

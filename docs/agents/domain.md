@@ -23,6 +23,8 @@ Single-context repo (most repos):
 └── src/
 ```
 
+A context's glossary sits beside the code it describes, wherever that is. `src/<context>/` is the usual place and the layout below shows it; this repository's second context is a shell script, so its glossary is `scripts/CONTEXT.md`. The map at the root is what says where each one is, so no reader has to guess.
+
 Multi-context repo (presence of `CONTEXT-MAP.md` at the root):
 
 ```

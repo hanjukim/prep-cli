@@ -40,7 +40,10 @@ Two documents carry the design, and neither is a changelog.
 
 - **`CONTEXT.md`** is the domain language: one entry per term the code is built
   out of, each with the argument for why it is that way. When a term's meaning
-  changes, the entry changes with it, in the same commit.
+  changes, the entry changes with it, in the same commit. There are two of these
+  — prep's at the root and the bootstrap script's in `scripts/` — and
+  `CONTEXT-MAP.md` says which one a term belongs in. A term that the script uses
+  and prep does not goes in the script's.
 - **`docs/adr/`** holds one record per decision, numbered in the order the
   decisions were made. A record is not edited into agreement with a later one.
   When a decision is narrowed or replaced, the new record makes the argument and
