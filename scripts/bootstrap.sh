@@ -92,6 +92,12 @@ GH_DIST="https://github.com/cli/cli/releases/download/v${GH_VERSION}"
 # step 3 ever runs.
 BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
 
+# Where the run leaves a file the terminal that started it can read, since that
+# is the one terminal no rc reaches (docs/adr/0024). ~/.local/share is where
+# this script already parks what it installs — the Node and gh trees — and it is
+# not $PREP_DIR, which is a git clone this would leave an untracked file in.
+PREP_SHARE="${PREP_SHARE:-$HOME/.local/share/prep}"
+
 # The step being run, so a failure can say where it stopped.
 STEP="start"
 
@@ -331,7 +337,7 @@ rc_block() {
   printf '\n# Added by the prep bootstrap script.\n'
 
   case "$rc" in
-    */config.fish)
+    *.fish)
       printf 'if not contains "%s" $PATH\n' "$dir"
       printf '    set -gx PATH "%s" $PATH\n' "$dir"
       printf 'end\n'
@@ -374,32 +380,52 @@ persist_on_path() {
   [ -z "${written:-}" ] || printf 'Put %s on PATH in %s.\n' "$dir" "$written"
 }
 
-# The one line that gives the terminal this script ran in the tools it installed.
+# The file the terminal that started this run can read to catch up.
 #
 # A rc file is read when a shell starts, and the shell reading this script
 # started before any of these tools existed. So the rc lines `persist_on_path`
 # writes reach every terminal except the one a person is looking at — and that
 # is the terminal they are standing in when the script stops at the GitHub login
 # and when it finishes. Telling them to open a new one is right and it is not
-# enough: the stop at step 9 asks for work in this terminal, and a machine-ready
-# ending names `prep doctor` for it (docs/adr/0024).
+# enough: the stop at step 9 asks for work in that terminal.
 #
-# Both directories go in, and in the order this run put them there, because a
-# person pasting one line should not have to know which tool came from which
-# installer. The paths are written out rather than left as `$HOME`, since this
-# is pasted by hand and read by somebody deciding whether to trust it.
+# A script cannot put anything on its parent's PATH. The environment is copied
+# when the shell forks, and what this run exports dies with it, so the only way
+# in is the parent shell running something itself. What it runs is this file —
+# the shape rustup, nvm and bun's own installers all landed on, for this same
+# reason. Handing over a file to read beats handing over a line to paste: it is
+# shorter to type, it is the same words on every machine, and what it does can
+# be read before it is run (docs/adr/0024).
 #
-# It is pasted into their shell, not into this one, so it is written in their
-# shell's syntax — fish takes a list and no `export`, and would answer the POSIX
-# line with a syntax error. csh and tcsh would need a third form; neither macOS
-# nor Debian starts anybody on one, and they get the POSIX line rather than a
-# guess (docs/adr/0024).
-path_line() {
-  local local_bin="$HOME/.local/bin" bun_bin="$BUN_INSTALL/bin"
+# Two files, because fish is not POSIX and would answer `export PATH=…` with a
+# syntax error. Each carries the guarded block `rc_block` writes into a rc, so
+# reading one twice puts the directory on once.
+write_env_files() {
+  local env_file
 
+  mkdir -p "$PREP_SHARE"
+
+  for env_file in "$PREP_SHARE/env.sh" "$PREP_SHARE/env.fish"; do
+    {
+      printf '# Written by the prep bootstrap script.\n'
+      printf '#\n'
+      printf '# Reading this puts what that run installed on PATH, for the shell that\n'
+      printf '# reads it. A terminal opened afterwards carries them already.\n'
+      rc_block "$env_file" "$HOME/.local/bin"
+      rc_block "$env_file" "$BUN_INSTALL/bin"
+    } >"$env_file"
+  done
+}
+
+# The one line that hands this terminal what the run installed.
+#
+# Named by its full path, because the shell it is pasted into has read no rc of
+# this script's making and `~` is the only part of it that would still expand.
+# fish reads `source` and not `.`, and reads the file written for it.
+env_line() {
   case "$(login_shell)" in
-    fish) printf 'set -gx PATH "%s" "%s" $PATH' "$local_bin" "$bun_bin" ;;
-    *) printf 'export PATH="%s:%s:$PATH"' "$local_bin" "$bun_bin" ;;
+    fish) printf 'source %s' "$PREP_SHARE/env.fish" ;;
+    *) printf '. %s' "$PREP_SHARE/env.sh" ;;
   esac
 }
 
@@ -486,9 +512,9 @@ Run this yourself, then run this script again:
 
 gh is written out in full because this terminal has not read a shell rc since it
 was installed, so a plain \`gh\` here would not be found. That holds for
-everything this script installed — prep, claude, node. One line gives this
-terminal all of them, and then the plain names work here too:
-  $(path_line)
+everything this script installed — prep, claude, node. Read this file and the
+plain names work here too:
+  $(env_line)
 
 A terminal opened after this run needs none of that.
 
@@ -697,6 +723,11 @@ step "4/10 node"
 # at step 9.
 export PATH="$HOME/.local/bin:$PATH"
 persist_on_path "$HOME/.local/bin"
+
+# Both directories are settled now, so the file for the terminal running this is
+# written here — at the same moment the rc files get them, and before any step
+# that can stop and hand it back (docs/adr/0024).
+write_env_files
 
 if have node; then
   echo "Node is already here."
@@ -957,8 +988,8 @@ printf '\n==> Done\n'
 # every line below names a tool by a name it does not know yet. So the line that
 # fixes it comes first, before any of them (docs/adr/0024).
 printf '\nThis terminal started before any of these tools existed, so it does not\n'
-printf 'carry them yet. Either open a new one, or give this one the names:\n'
-printf '  %s\n' "$(path_line)"
+printf 'carry them yet. Either open a new one, or read this file into it:\n'
+printf '  %s\n' "$(env_line)"
 
 if [ "$PROJECT_READY" -eq 1 ]; then
   printf '\nYour project is at %s\n' "$PROJECT_DIR"

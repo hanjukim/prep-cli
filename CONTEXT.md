@@ -462,9 +462,16 @@ its rc before any of this existed, so a command named for a person to run
 themselves is named by its full path — `$GH_BIN auth login`, not `gh auth login`.
 That works for one command and does not carry: by the time somebody wants
 `prep doctor` or `claude` in that terminal, writing every name out in full is
-worse than handing the PATH over once. So the script prints the line that gives
-this terminal both directories — in that person's own shell syntax, since fish
-would answer the POSIX one with a syntax error — at the two places a run ends — the stop at
+worse than handing the PATH over once. A script cannot do it for them: the
+environment is copied when the shell forks, so what this run exports dies with
+it and the only way into that terminal is the parent shell running something
+itself. What it runs is a file this run leaves at `~/.local/share/prep` —
+`env.sh`, or `env.fish` where the login shell is fish, each carrying the same
+guarded blocks the rc files get. A path is shorter to type than the export line,
+is the same words on every machine, and can be read before it is trusted, which
+is the shape rustup, nvm and bun's own installers all landed on. The script
+prints the one line that reads it — `. …/env.sh` or `source …/env.fish` — at the
+two places a run ends — the stop at
 step 9, where a person is asked to work in that terminal and never sees the
 closing message, and the top of the closing message itself, ahead of every line
 that names a tool. The stop at step 9 also names the `curl … | bash` that

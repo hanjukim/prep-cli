@@ -256,7 +256,12 @@ function holds(shell: string): boolean {
  * pass while the machine failed.
  */
 describe("the rc lines, read by the shell they were written for", () => {
-  function pathAfterReading(shell: string, rc: string, command: string): string {
+  /** What PATH holds after `shell` has read the rc written for it. */
+  function pathAfterReadingRc(
+    shell: string,
+    rc: string,
+    command: string,
+  ): { path: string; home: string } {
     const home = runInFreshHome('persist_on_path "$HOME/.local/bin"', { [rc]: "" }, `/bin/${shell}`);
     const result = Bun.spawnSync({
       cmd: [shell, "-c", command],
@@ -266,21 +271,18 @@ describe("the rc lines, read by the shell they were written for", () => {
     if (result.exitCode !== 0) {
       throw new Error(`${shell} could not read what was written: ${result.stderr.toString()}`);
     }
-    return `${result.stdout.toString()}||${home}`;
+    return { path: result.stdout.toString(), home };
   }
 
   test.skipIf(!holds("zsh"))("zsh", () => {
-    const [path, home] = pathAfterReading("zsh", ".zshrc", '. "$HOME/.zshrc"; printf "%s" "$PATH"')
-      .split("||");
+    const read = '. "$HOME/.zshrc"; printf "%s" "$PATH"';
+    const { path, home } = pathAfterReadingRc("zsh", ".zshrc", read);
     expect(path).toContain(`${home}/.local/bin`);
   });
 
   test.skipIf(!holds("dash"))("dash", () => {
-    const [path, home] = pathAfterReading(
-      "dash",
-      ".profile",
-      '. "$HOME/.profile"; printf "%s" "$PATH"',
-    ).split("||");
+    const read = '. "$HOME/.profile"; printf "%s" "$PATH"';
+    const { path, home } = pathAfterReadingRc("dash", ".profile", read);
     expect(path).toContain(`${home}/.local/bin`);
   });
 
@@ -300,9 +302,16 @@ describe("the rc lines, read by the shell they were written for", () => {
   });
 });
 
-describe("path_line", () => {
-  /** Runs path_line under a HOME and a login shell of its own. */
-  function runPathLine(shell = "/bin/bash"): string {
+/**
+ * The file the terminal that ran the script reads to catch up.
+ *
+ * A script cannot put anything on its parent's PATH — the environment is copied
+ * when the shell forks, and what the run exports dies with it. The only way in
+ * is the parent shell running something itself, and what it runs is this file.
+ */
+describe("write_env_files", () => {
+  /** Writes the env files under a HOME of its own, and hands back that HOME. */
+  function writeEnvFiles(): string {
     const home = mkdtempSync(join(tmpdir(), "prep-bootstrap-"));
     const result = Bun.spawnSync({
       cmd: [
@@ -310,74 +319,149 @@ describe("path_line", () => {
         "-c",
         `set -Eeuo pipefail
 BUN_INSTALL="$HOME/.bun"
-${shellFunction("login_shell")}
-${shellFunction("path_line")}
-path_line`,
-      ],
-      env: { ...process.env, HOME: home, SHELL: shell },
-    });
-
-    if (result.exitCode !== 0) throw new Error(`path_line failed: ${result.stderr.toString()}`);
-    return result.stdout.toString();
-  }
-
-  test("names both directories this script puts on PATH", () => {
-    const line = runPathLine();
-    // Node, gh and Claude Code land in the first; bun and prep in the second.
-    expect(line).toContain("/.local/bin");
-    expect(line).toContain("/.bun/bin");
-  });
-
-  test("writes the paths out, since it is pasted into a shell that read no rc", () => {
-    // A `$HOME` would still expand, but the line is also read by a person
-    // deciding whether to trust it, and a path says where it points.
-    expect(runPathLine()).not.toContain("$HOME");
-  });
-
-  test("keeps what the terminal already carries", () => {
-    expect(runPathLine()).toContain(":$PATH");
-  });
-
-  test("zsh and dash take the same line bash does", () => {
-    for (const shell of ["/bin/zsh", "/bin/dash", "/usr/bin/ksh"]) {
-      expect(runPathLine(shell)).toStartWith('export PATH="');
-    }
-  });
-
-  test("fish gets fish, since the POSIX line is a syntax error there", () => {
-    const line = runPathLine("/usr/bin/fish");
-    // fish has no `export`, and its PATH is a list rather than a joined string.
-    expect(line).toStartWith("set -gx PATH ");
-    expect(line).toEndWith(" $PATH");
-    expect(line).not.toContain("export");
-    expect(line).not.toContain(":");
-  });
-
-  test("a shell nobody named falls back to the POSIX line", () => {
-    expect(runPathLine("")).toStartWith('export PATH="');
-  });
-
-  test("what it prints is a line a shell runs, and it puts both on PATH", () => {
-    const home = mkdtempSync(join(tmpdir(), "prep-bootstrap-"));
-    const result = Bun.spawnSync({
-      cmd: [
-        "bash",
-        "-c",
-        `set -Eeuo pipefail
-BUN_INSTALL="$HOME/.bun"
-${shellFunction("path_line")}
-PATH=/usr/bin:/bin
-eval "$(path_line)"
-printf '%s' "$PATH"`,
+PREP_SHARE="$HOME/.local/share/prep"
+${shellFunction("rc_block")}
+${shellFunction("write_env_files")}
+write_env_files`,
       ],
       env: { ...process.env, HOME: home },
     });
 
+    if (result.exitCode !== 0) {
+      throw new Error(`write_env_files failed: ${result.stderr.toString()}`);
+    }
+    return home;
+  }
+
+  test("writes one file for POSIX shells and one for fish", () => {
+    const home = writeEnvFiles();
+    for (const name of [".local/share/prep/env.sh", ".local/share/prep/env.fish"]) {
+      expect(read(home, name)).toContain("/.local/bin");
+      expect(read(home, name)).toContain("/.bun/bin");
+    }
+  });
+
+  test("the fish one is fish, not sh", () => {
+    const written = read(writeEnvFiles(), ".local/share/prep/env.fish");
+    expect(written).toContain("set -gx PATH");
+    expect(written).not.toContain("export PATH");
+  });
+
+  test("it is not written inside the prep clone, which is a working tree", () => {
+    expect(SCRIPT).not.toContain('PREP_SHARE="${PREP_SHARE:-$PREP_DIR');
+    expect(SCRIPT).toContain('PREP_SHARE="${PREP_SHARE:-$HOME/.local/share/prep}"');
+  });
+
+  test("a run that writes it twice leaves one file, not a growing one", () => {
+    // The rc files are appended to; this one is replaced, since it is this
+    // script's own file and every run knows the whole of what belongs in it.
+    const home = mkdtempSync(join(tmpdir(), "prep-bootstrap-"));
+    const twice = `set -Eeuo pipefail
+BUN_INSTALL="$HOME/.bun"
+PREP_SHARE="$HOME/.local/share/prep"
+${shellFunction("rc_block")}
+${shellFunction("write_env_files")}
+write_env_files
+write_env_files`;
+
+    const result = Bun.spawnSync({ cmd: ["bash", "-c", twice], env: { ...process.env, HOME: home } });
     expect(result.exitCode).toBe(0);
-    expect(result.stdout.toString()).toContain(`${home}/.local/bin`);
-    expect(result.stdout.toString()).toContain(`${home}/.bun/bin`);
-    // The directories it started with are still behind them.
-    expect(result.stdout.toString()).toContain("/usr/bin");
+
+    const written = read(home, ".local/share/prep/env.sh");
+    expect(written.match(/Added by the prep bootstrap script/g)?.length).toBe(2);
+  });
+
+  describe("read by the shell it was written for", () => {
+    /** What PATH holds after `shell` has read the env file, and under which HOME. */
+    function pathAfterReading(shell: string, command: string): { path: string; home: string } {
+      const home = writeEnvFiles();
+      const result = Bun.spawnSync({
+        cmd: [shell, "-c", command],
+        env: { ...process.env, HOME: home, PATH: "/usr/bin:/bin" },
+      });
+
+      if (result.exitCode !== 0) {
+        throw new Error(`${shell} could not read it: ${result.stderr.toString()}`);
+      }
+      return { path: result.stdout.toString(), home };
+    }
+
+    const source = '. "$HOME/.local/share/prep/env.sh"';
+    const readEnvSh = `${source}; printf "%s" "$PATH"`;
+
+    for (const shell of ["sh", "bash", "zsh", "dash", "ksh"]) {
+      test.skipIf(!holds(shell))(shell, () => {
+        const { path, home } = pathAfterReading(shell, readEnvSh);
+
+        expect(path).toContain(`${home}/.local/bin`);
+        expect(path).toContain(`${home}/.bun/bin`);
+        // What the terminal already carried is still behind them.
+        expect(path).toContain("/usr/bin");
+      });
+    }
+
+    test.skipIf(!holds("fish"))("fish", () => {
+      const { path, home } = pathAfterReading(
+        "fish",
+        'source "$HOME/.local/share/prep/env.fish"; printf "%s" "$PATH"',
+      );
+
+      expect(path).toContain(`${home}/.local/bin`);
+      expect(path).toContain(`${home}/.bun/bin`);
+    });
+
+    test.skipIf(!holds("dash"))("reading it twice puts the directory on once", () => {
+      const { path, home } = pathAfterReading("dash", `${source}; ${readEnvSh}`);
+
+      expect(path.split(":").filter((dir) => dir === `${home}/.local/bin`).length).toBe(1);
+    });
+  });
+});
+
+describe("env_line", () => {
+  /** Runs env_line under a HOME and a login shell of its own. */
+  function runEnvLine(shell = "/bin/bash"): string {
+    const home = mkdtempSync(join(tmpdir(), "prep-bootstrap-"));
+    const result = Bun.spawnSync({
+      cmd: [
+        "bash",
+        "-c",
+        `set -Eeuo pipefail
+PREP_SHARE="$HOME/.local/share/prep"
+${shellFunction("login_shell")}
+${shellFunction("env_line")}
+env_line`,
+      ],
+      env: { ...process.env, HOME: home, SHELL: shell },
+    });
+
+    if (result.exitCode !== 0) throw new Error(`env_line failed: ${result.stderr.toString()}`);
+    return result.stdout.toString();
+  }
+
+  test("names the file by its full path, since this shell read no rc", () => {
+    const line = runEnvLine();
+    expect(line).toStartWith(". /");
+    expect(line).toEndWith("/.local/share/prep/env.sh");
+    expect(line).not.toContain("$HOME");
+    expect(line).not.toContain("~");
+  });
+
+  test("zsh, dash and ksh read the same file bash does", () => {
+    for (const shell of ["/bin/zsh", "/bin/dash", "/usr/bin/ksh"]) {
+      expect(runEnvLine(shell)).toEndWith("/env.sh");
+    }
+  });
+
+  test("fish gets its own file, and the word fish uses to read one", () => {
+    // fish has no `.` builtin, and env.sh would be a syntax error in it.
+    const line = runEnvLine("/usr/bin/fish");
+    expect(line).toStartWith("source /");
+    expect(line).toEndWith("/env.fish");
+  });
+
+  test("a shell nobody named falls back to the POSIX file", () => {
+    expect(runEnvLine("")).toEndWith("/env.sh");
   });
 });
 
@@ -400,15 +484,20 @@ describe("the commands the script hands to a person", () => {
 
   test("the stop at step 9 hands this terminal its PATH", () => {
     const stop = SCRIPT.slice(SCRIPT.indexOf("The project is on GitHub"));
-    expect(stop.slice(0, stop.indexOf("second run skips it"))).toContain("$(path_line)");
+    expect(stop.slice(0, stop.indexOf("second run skips it"))).toContain("$(env_line)");
   });
 
   test("the closing message hands this terminal its PATH before naming a tool", () => {
     const done = SCRIPT.slice(SCRIPT.indexOf("==> Done"));
-    expect(done).toContain('"$(path_line)"');
+    expect(done).toContain('"$(env_line)"');
     // Ahead of `cd`/`claude` and ahead of the second-run line, because every one
     // of them is a name this shell does not carry yet.
-    expect(done.indexOf('"$(path_line)"')).toBeLessThan(done.indexOf("claude\\n"));
+    expect(done.indexOf('"$(env_line)"')).toBeLessThan(done.indexOf("claude\\n"));
+  });
+
+  test("the file they are sent to read is written before any step can stop", () => {
+    // Step 9 hands it back, and step 9 is where a run most often ends.
+    expect(SCRIPT.indexOf("\nwrite_env_files\n")).toBeLessThan(SCRIPT.indexOf('step "9/10'));
   });
 
   test("both directories the script exports are written into a shell rc", () => {

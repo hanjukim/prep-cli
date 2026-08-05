@@ -55,13 +55,24 @@ three stood, and emitted one POSIX block. Three shells fall through that:
 
 **The script hands over a PATH along with every command it hands over.**
 
-1. **One line names both directories, and it is printed wherever the run ends.**
-   `path_line` writes `export PATH="<~/.local/bin>:<~/.bun/bin>:$PATH"`, with
-   the paths spelled out rather than left as `$HOME`, since it is pasted into a
-   shell that may be neither bash nor the one that ran the script. It is printed
-   at the step 9 stop and at the top of the closing message — ahead of every
-   line that names a tool, because each of those is a name the shell does not
-   carry yet.
+1. **The run leaves a file, and hands back the one line that reads it.**
+   `write_env_files` writes `~/.local/share/prep/env.sh` and `env.fish`, each
+   carrying the same guarded block the rc files get, for both directories.
+   `env_line` prints `. <path>/env.sh` — or `source <path>/env.fish` where the
+   login shell is fish — at the step 9 stop and at the top of the closing
+   message, ahead of every line that names a tool, because each of those is a
+   name the shell does not carry yet.
+
+   **A file rather than the export line itself.** The line is long, differs by
+   machine, and has to be read before it is trusted. A path is short, is the
+   same words everywhere, and can be opened first. It is also the shape rustup,
+   nvm and bun's own installers all landed on, for this same reason.
+
+   **`~/.local/share/prep`, not `$PREP_DIR`.** `~/.local/share` is where this
+   script already parks what it installs, the Node and gh trees; `$PREP_DIR` is
+   a git clone, and a generated file there is an untracked file in a working
+   tree. The file is written at step 4, where both directories are settled and
+   before any step that can stop and hand it back.
 2. **`~/.bun/bin` is persisted by this script.** `persist_on_path` is called for
    it the same way it is for `~/.local/bin`. bun's installer may write a rc line
    as well; the two do not find each other, because bun writes the directory
@@ -79,7 +90,7 @@ three stood, and emitted one POSIX block. Three shells fall through that:
    database where a container or a `su` left it unset. It decides which rc a
    machine with none gets — `.zshrc` for zsh, `config.fish` for fish, `.profile`
    and `.bashrc` together for bash, `.profile` for anything else — and it
-   decides the syntax `path_line` prints.
+   decides which env file `env_line` names.
 6. **Every rc that is already there is still written to, and the list grows by
    two.** `~/.bash_profile`, so a bash login shell that stops there is not passed
    over, and `~/.config/fish/config.fish`. One person may run bash in one
@@ -88,8 +99,9 @@ three stood, and emitted one POSIX block. Three shells fall through that:
    names". `$SHELL` decides only what to create where nothing exists at all.
 7. **fish gets fish, everywhere it appears.** `rc_block` picks its syntax off
    the file it is writing into — `if not contains … / set -gx PATH … / end` for
-   `config.fish`, the `case` form for everything else — and `path_line` prints
-   `set -gx PATH …` when the login shell is fish.
+   anything named `.fish`, the `case` form for everything else — so the rc and
+   the env file are both written by it, and `env_line` sends a fish shell to
+   `env.fish` with the word fish uses to read one.
 8. **csh and tcsh get the POSIX line and no special case.** They would need a
    third syntax (`setenv`) and a fourth set of rc files, and neither macOS nor
    Debian starts anybody on one. A guess written into a rc file is worse than a
@@ -97,10 +109,20 @@ three stood, and emitted one POSIX block. Three shells fall through that:
 
 ## Rationale
 
-- **A script cannot move the shell that called it.** That is not a defect to
-  route around; it is the reason the closing lines are printed rather than run
+- **A script cannot move the shell that called it.** The environment is copied
+  when the shell forks, and no call lets a process write another's. So the only
+  way into that terminal is the parent shell running something itself, and the
+  whole question is what it should have to run. That is not a defect to route
+  around; it is the reason the closing lines are printed rather than run
   (ADR-0013 decision 5 makes the same argument about the Claude Code login).
-  What can be fixed is whether the person is told, and where.
+- **Sourcing the entry point was considered and refused.** `. <(curl … )` runs
+  the script in the person's own shell, which would put PATH there directly. It
+  also puts `set -Eeuo pipefail`, `trap ERR` and every `exit` in this script
+  there: a bootstrap that fails on a network, an apt or a login would close the
+  terminal it was run from. Isolating the work in a subshell and eval-ing back
+  only the PATH would recover that, and buys one line less to type in exchange
+  for an entry point whose failure mode is somebody's shell. The file costs one
+  short command and leaves the entry point exactly as it is.
 - **The full path was the right fix for one command and does not generalise.**
   ADR-0022 spelled `gh` out because the login is one line. By the time somebody
   wants `prep doctor` or `claude`, writing every command out in full is worse
@@ -111,11 +133,11 @@ three stood, and emitted one POSIX block. Three shells fall through that:
   installer at its word that a rc got written. The script now writes what it
   depends on.
 - **`source ~/.bashrc` was not chosen, though it is what the person ran.** It is
-  shorter, and it is wrong on three counts: it names one rc out of the several
-  the script may have written to, on a machine where bun's installer wrote
-  nothing it sources a file that never carried `~/.bun/bin` either, and it is
-  the wrong file for anybody not running bash. The `export` line says what it
-  does, and where it would be wrong — fish — the shell gets its own.
+  wrong on three counts: it names one rc out of the several the script may have
+  written to, on a machine where bun's installer wrote nothing it sources a file
+  that never carried `~/.bun/bin` either, and it is the wrong file for anybody
+  not running bash. The env file is this script's own, holds exactly what this
+  run installed, and has a fish twin where sourcing a POSIX file would fail.
 - **The rc list stayed a list, and only the creation rule reads `$SHELL`.**
   Writing to the one file `$SHELL` names would be the tidier rule and it loses
   the person who runs bash in one terminal and zsh in another. A rc that already
@@ -130,9 +152,12 @@ three stood, and emitted one POSIX block. Three shells fall through that:
 ## Consequences
 
 - A run that stops at step 9 hands back three lines: the login, the way back,
-  and the PATH that makes both plain names work in that terminal.
+  and the file to read so both work by name in that terminal.
 - A finished run says the same thing once, before it names `cd`, `claude`, or a
   second `curl`.
+- `~/.local/share/prep/env.sh` and `env.fish` are files this script owns. Every
+  run rewrites them whole rather than appending, since each run knows all of
+  what belongs in them.
 - `prep` is on PATH in a new terminal whether or not bun's installer identified
   the shell.
 - A rc file may carry two blocks for `~/.bun/bin`, one bun's and one this
@@ -156,10 +181,9 @@ machine that failed. A run on WSL with Ubuntu, stopping at step 9 and carrying
 on from that terminal, is the acceptance test.
 
 **fish was run, in a container rather than on a machine that has it.** No fish
-is installed where this was written, so the test reading `config.fish` back with
-fish stands aside there and zsh and dash carry the suite. The block and the
-pasted line were both executed against fish 3.7.1 by hand: sourcing the rc put
-both directories on PATH, the pasted line did the same, and sourcing the rc
-twice left the directory on once. What that does not cover is a fish shell
-started as a login shell on a real machine, which reads `config.fish` through
-its own startup rather than through `source`.
+is installed where this was written, so the two tests that read a fish file back
+with fish stand aside there, and sh, bash, zsh, dash and ksh carry the suite.
+Both fish files were executed against fish 3.7.1 by hand: sourcing each put both
+directories on PATH, and sourcing each twice left them on once. What that does
+not cover is a fish started as a login shell on a real machine, which reads
+`config.fish` through its own startup rather than through `source`.
