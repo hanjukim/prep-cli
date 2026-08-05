@@ -91,7 +91,10 @@ tree that would become public is the tree that was already clean.
    does not need, on the one path that was otherwise unattended. Moving it is a
    change to an order that was settled by real runs on Linux and WSL
    (ADR-0017), and it is filed as an issue rather than folded in here, so that a
-   run that breaks has one cause to look at and not two.
+   run that breaks has one cause to look at and not two:
+   `https://github.com/hanjukim/prep-cli/issues/2`. It is written out because a
+   bare `#N` in these records means the self-hosted instance and nothing here
+   (`docs/agents/issue-tracker.md`).
 
 ## Rationale
 
