@@ -35,7 +35,14 @@ describe("rows", () => {
 
   test("drops a result no entry accounts for", () => {
     const specs = all();
-    const stray = { id: "nothing", status: "missing" as const, binary: null, path: null, guidance: null };
+    const stray = {
+      id: "nothing",
+      status: "missing" as const,
+      binary: null,
+      path: null,
+      renamed: null,
+      guidance: null,
+    };
     expect(ids(rows(specs, [stray]))).toEqual([]);
   });
 });

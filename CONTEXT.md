@@ -277,8 +277,9 @@ _Avoid_: guidance, hint, suggestion
 
 **check result**:
 What doctor read about one registry entry: its id, its status, the binary
-actually looked up, where that binary was found, and the guidance that goes with
-it. The status is one of three — **installed**, **missing**, or **unsupported** —
+actually looked up, where that binary was found, the name this platform's
+package ships that binary under where it is not the same one, and the guidance
+that goes with it. The status is one of three — **installed**, **missing**, or **unsupported** —
 and the last one means this platform has no entry for the tool, so the question
 does not apply here rather than the answer being no. It is a read and nothing
 else: PATH is walked with `which`, no subprocess is started, and every path
@@ -304,13 +305,18 @@ not read it.
 The canonical name is what counts. It is what a person types, what an alias
 expands to and what a repository's own scripts call, so the check asks for `bat`
 on every platform, and a machine answering only to `batcat` is a gap like any
-other — reported as one in the human report and in `--json` alike. What closes
-it is a single command that installs the package and puts the canonical name on
-PATH, as a symlink in `~/.local/bin`, the directory the bootstrap script exports
-for its own run and writes into a shell rc for the ones that come after
-(docs/adr/0023). The package is half of what a finished machine holds and the
-name is the other half. prep creates neither: it names the command, and the
-bootstrap's gap step runs it (docs/adr/0010).
+other — reported as one in the human report and in `--json` alike
+(docs/adr/0023).
+
+The package is half of what a finished machine holds and the name is the other
+half, and the two halves are closed by two different things. The guidance is the
+install command for the package and says nothing about a name, because guidance
+is a command a person can paste. The name is made by one step of the bootstrap
+script, over every renamed tool at once, in `~/.local/bin` — a directory that is
+the script's and not the table's (docs/adr/0025). What the table owes that step
+is the shipped name, which is why `--json` carries it beside the canonical one:
+a reader outside prep pairs the two without a table of its own. prep creates
+neither half (docs/adr/0010).
 _Avoid_: alias, binary override
 
 **guidance**:

@@ -214,6 +214,23 @@ already installed on this machine's own side is kept, however old: which
 operating system a tool belongs to is the question, and its version number is
 not.
 
+**A name a package did not leave behind is given in one place.** Debian family
+installs `fd-find` as `fdfind` and `bat` as `batcat`, and everything that
+reaches for either reaches for `fd` and `bat`, so the package is half of what a
+finished machine holds and the name is the other half (docs/adr/0023). The
+script already makes the other half for everything it unpacks itself — the last
+line of the tarball install links every binary into `~/.local/bin` — and step 8
+does the same for what apt installed, once, for every renamed tool at once
+(docs/adr/0025). Which names those are is prep's answer and not the script's:
+`--json` carries the shipped name beside the canonical one, and a reader beside
+the gap reader turns the report into pairs, so no tool name is written in the
+script. The report it reads is the one taken before the installs, because the
+two names are a fact about the platform; what the installs change is whether the
+shipped name resolves, and that is asked at the moment the link would be made. A
+name that already answers is left alone, so a `fd` somebody built from source
+and a link an earlier run made are both kept, and a shipped name that resolves
+to nothing is printed at the end rather than linked to nothing at all.
+
 **A link stops the run, a gap does not.** The chain is what the destination
 depends on, so a step that fails names itself and ends the run — and because
 every install is guarded, every clone by whether the directory is already there,

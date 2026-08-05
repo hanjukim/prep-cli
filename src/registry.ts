@@ -76,7 +76,10 @@ const STANDARD: readonly ToolSpec[] = [
     platforms: {
       darwin: { guidance: { kind: "command", command: "brew install fd" } },
       // The package is fd-find here, and the executable it lays down is fdfind.
-      linux: renamedOnDebian("fd-find", "fdfind", "fd"),
+      linux: {
+        renamed: "fdfind",
+        guidance: { kind: "command", command: "sudo apt install -y fd-find" },
+      },
     },
   },
   {
@@ -111,7 +114,10 @@ const STANDARD: readonly ToolSpec[] = [
     platforms: {
       darwin: { guidance: { kind: "command", command: "brew install bat" } },
       // The package stays bat, but the executable is batcat (it clashes with the existing bat command).
-      linux: renamedOnDebian("bat", "batcat", "bat"),
+      linux: {
+        renamed: "batcat",
+        guidance: { kind: "command", command: "sudo apt install -y bat" },
+      },
     },
   },
   {
@@ -194,54 +200,6 @@ const TOOLS: readonly ToolSpec[] = [...STANDARD, ...HARNESSES];
 
 /** The skill that writes the guidance prep hands the project over for. */
 const HANDOFF_SKILL = "setup-matt-pocock-skills";
-
-/**
- * The Linux side of a tool Debian ships under another name.
- *
- * bat and fd-find both land as something else — batcat and fdfind — because the
- * names they wanted were taken by packages that were there first. Installing the
- * package leaves a machine that holds the tool and does not answer to it, and
- * the name is what everything else on that machine types: a person, an alias, a
- * script, this project's own guidance. So the command closes both halves. It
- * installs the package, and it puts the canonical name on PATH.
- *
- * `~/.local/bin` is where the name lands because the bootstrap script already
- * carries that directory: it exports it before the gap step runs, and writes it
- * into a shell rc, so the terminal opened after the run finds the name too
- * (docs/adr/0023).
- *
- * Every part of it says the same thing twice, which is what the gap step needs —
- * it runs on every bootstrap, over a machine the last run may already have
- * finished. `apt install -y` reports an installed package and stops, `mkdir -p`
- * accepts a directory that is there, and `ln -sf` replaces the link rather than
- * refusing to overwrite it.
- *
- * The name is resolved with `command -v` rather than written as a fixed path,
- * because where apt puts an executable is apt's business and not this table's.
- * It is resolved into a name of its own first, so that a lookup finding nothing
- * ends the command there. Inside the `ln` arguments it would be a substitution
- * rather than a link in the chain: an empty answer would sail past `&&`, `ln`
- * would make a symlink pointing at nothing, and the whole command would report
- * success on a machine where the name still does not run.
- *
- * prep runs none of this (docs/adr/0010). It names the command, and the gap step
- * of the bootstrap script executes it like every other one.
- *
- *   $1 the apt package
- *   $2 the name that package ships the executable under
- *   $3 the name the tool is called by, which is what has to end up on PATH
- */
-function renamedOnDebian(pkg: string, shipped: string, canonical: string): PlatformSpec {
-  return {
-    renamed: shipped,
-    guidance: {
-      kind: "command",
-      command:
-        `sudo apt install -y ${pkg} && ${shipped}="$(command -v ${shipped})" && ` +
-        `mkdir -p ~/.local/bin && ln -sf "$${shipped}" ~/.local/bin/${canonical}`,
-    },
-  };
-}
 
 /**
  * One harness entry. Both vendors name the cask after the tool, so the id

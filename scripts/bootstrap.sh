@@ -135,6 +135,12 @@ STEP="start"
 # somebody without a set-up project.
 FAILED_GAPS=""
 
+# Names that would not be linked, kept for the same reason and reported apart
+# from the gaps above. A gap is closed by running the command printed with it,
+# and a name nothing on this machine answers to has no such line — what it needs
+# is the package looked at, not a command pasted.
+FAILED_LINKS=""
+
 step() {
   STEP="$1"
   printf '\n==> %s\n' "$1"
@@ -276,6 +282,62 @@ install_tarball() {
 
   for binary in "$@"; do
     ln -sf "$home/bin/$binary" "$HOME/.local/bin/$binary"
+  done
+}
+
+# Gives a tool the name it is called by, where the package shipped another one.
+#
+# Debian family installs fd-find as fdfind and bat as batcat, because both names
+# were taken by packages that were there first. The package is half of what a
+# finished machine holds and the name is the other half: `fd` and `bat` are what
+# a person types, what an alias expands to and what a prepared repository's own
+# scripts call (docs/adr/0023).
+#
+# This is the one place that closes that half, for every renamed tool at once and
+# whatever apt did with it (docs/adr/0025). The link lands in ~/.local/bin — the
+# directory install_tarball above already links Node, gh and Claude Code into,
+# exported for this run and written into a shell rc for the ones after it. The
+# script decides where a file goes and prep decides what is missing, which is the
+# split every step here holds to (docs/adr/0009).
+#
+# stdin carries one pair per line, the canonical name and the shipped name
+# separated by a tab, which is what scripts/links.ts reads out of a doctor
+# report. Nothing to link is an empty stdin and this loop does not run, which is
+# every macOS run.
+link_renamed() {
+  local name shipped target
+  mkdir -p "$HOME/.local/bin"
+
+  while IFS=$'\t' read -r name shipped; do
+    # A blank line is nothing to link, not a pair of empty names to ask about.
+    if [ -z "$name" ] || [ -z "$shipped" ]; then
+      continue
+    fi
+
+    # A machine where the name already answers is left alone. It holds the tool
+    # under its own name — built from source, installed from cargo, taken from a
+    # backport — and a link of ours over it would swap what somebody chose for
+    # what a package renamed. A link an earlier run made answers here too, so a
+    # second run writes nothing.
+    if have "$name"; then
+      continue
+    fi
+
+    # The shipped name is resolved into a path before anything is written. An
+    # unresolved one is a package that did not install, or one that installed
+    # and laid down nothing under the name this table expects; `ln -sf ""` was
+    # verified to exit 0 and leave a symlink pointing at nothing, which is the
+    # machine that reports itself finished and runs neither name.
+    if ! have "$shipped"; then
+      printf 'Nothing here answers to %s, so %s could not be linked. Carrying on.\n' \
+        "$shipped" "$name" >&2
+      FAILED_LINKS="${FAILED_LINKS}  ${name} (this machine has no ${shipped})"$'\n'
+      continue
+    fi
+
+    target="$(command -v "$shipped")"
+    ln -sf "$target" "$HOME/.local/bin/$name"
+    printf 'Linked %s to %s.\n' "$name" "$target"
   done
 }
 
@@ -933,12 +995,10 @@ else
     # on its own, rather than quietly eating the tool behind it. The commands
     # themselves answer what apt would ask (src/registry.ts).
     #
-    # A command may do more than install a package. Debian ships bat as batcat
-    # and fd-find as fdfind, so the command that closes either gap also links
-    # the canonical name into ~/.local/bin — the directory step 4 exported for
-    # this run and persisted for the shells after it (docs/adr/0023). Running
-    # them again changes nothing, which is what a step that runs on every
-    # bootstrap needs.
+    # Every one of them installs a package and does nothing else. What a package
+    # calls the executable it lays down is settled below, in one place for all of
+    # them (docs/adr/0025). Running any of these again changes nothing, which is
+    # what a step that runs on every bootstrap needs.
     if ! bash -c "$command" </dev/null; then
       # A tool that would not install is reported at the end rather than
       # stopping the run. The links of the chain are behind us; what is left
@@ -947,6 +1007,22 @@ else
       FAILED_GAPS="${FAILED_GAPS}  ${command}"$'\n'
     fi
   done <<<"$commands"
+fi
+
+# The names the packages above did not leave behind.
+#
+# It runs after the installs and off the report taken before them, because the
+# two names are a fact about the platform and not about this machine — what the
+# installs change is whether the shipped name resolves, and that is asked inside
+# the loop. So there is no second doctor run here.
+#
+# The reader runs in its own command and the loop in this shell, rather than the
+# two joined by a pipe: a pipe puts the loop in a subshell, and every failed link
+# it collected would go with it when the subshell ended.
+links="$(printf '%s' "$report" | bun run "$PREP_DIR/scripts/links.ts" || true)"
+
+if [ -n "$links" ]; then
+  link_renamed <<<"$links"
 fi
 
 # ---------------------------------------------------------------------------
@@ -1110,6 +1186,12 @@ fi
 if [ -n "$FAILED_GAPS" ]; then
   printf '\nThese would not install. Run them yourself when you have a moment:\n'
   printf '%s' "$FAILED_GAPS"
+fi
+
+if [ -n "$FAILED_LINKS" ]; then
+  printf '\nThese tools are installed under another name, and this run could not\n'
+  printf 'give them their own. `prep doctor` reports them as missing until it can:\n'
+  printf '%s' "$FAILED_LINKS"
 fi
 
 # The one step a script cannot take for anybody (docs/adr/0013 decision 5).

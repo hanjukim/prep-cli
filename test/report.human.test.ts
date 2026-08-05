@@ -278,12 +278,14 @@ describe("human report content", () => {
     expect(output).toMatch(/✗ fd\s/);
   });
 
-  test("the command for a renamed binary puts the canonical name on PATH", () => {
+  // A person reads this line to paste it (docs/adr/0010), so it is the install
+  // command for the package and nothing more. The name the package ships is
+  // settled by the bootstrap script, off the same report (docs/adr/0025).
+  test("the line printed for a renamed binary is a command a person can paste", () => {
     const output = render("linux", { ...APT, batcat: "/usr/bin/batcat" });
-    expect(output).toContain(
-      'sudo apt install -y bat && batcat="$(command -v batcat)" && ' +
-        'mkdir -p ~/.local/bin && ln -sf "$batcat" ~/.local/bin/bat',
-    );
+    expect(output).toContain("sudo apt install -y bat");
+    expect(output).not.toContain("ln -sf");
+    expect(output).not.toContain("batcat=");
   });
 
   test("a machine that answers to bat and fd is given no command for either", () => {

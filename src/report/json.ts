@@ -20,6 +20,16 @@ type JsonResult = {
   status: CheckResult["status"];
   binary: string | null;
   path: string | null;
+  /**
+   * The name this platform's package ships the executable under, when that is
+   * not `binary`. null everywhere else.
+   *
+   * Emitted because the one reader that acts on it is outside prep: the
+   * bootstrap script links the canonical name to what the package actually
+   * installed, and this is what spares it a table of the two names of its own
+   * (docs/adr/0025).
+   */
+  renamed: string | null;
   guidance: JsonGuidance | null;
 };
 
@@ -56,6 +66,7 @@ function toJsonResult(result: CheckResult): JsonResult {
     status: result.status,
     binary: result.binary,
     path: result.path,
+    renamed: result.renamed,
     guidance: result.guidance === null ? null : toJsonGuidance(result.guidance),
   };
 }
