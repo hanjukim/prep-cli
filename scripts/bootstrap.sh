@@ -258,8 +258,95 @@ install_tarball() {
 # alone, so a second run of this script adds nothing.
 #
 #   $1 the directory to put on PATH
+# The shell a person's own terminals start.
+#
+# Not the shell running this script. The one-liner pipes into bash whatever they
+# use, so `$0` and `$BASH_VERSION` answer for the pipe. `$SHELL` is what a login
+# set out of the password database, and it survives the pipe because it is
+# exported. Where it is unset — a container, a cron, a `su` that kept nothing —
+# the database is read instead, and a machine answering neither is treated as
+# POSIX, which is what every shell here but fish is.
+login_shell() {
+  local shell="${SHELL:-}"
+
+  if [ -z "$shell" ]; then
+    shell="$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7 || true)"
+  fi
+
+  printf '%s' "${shell##*/}"
+}
+
+# Every rc file this script writes to, in the order a shell would meet them.
+#
+# `.bash_profile` is here because a bash login shell reads the first of
+# `.bash_profile`, `.bash_login` and `.profile` that exists and stops — so on a
+# machine carrying one, a line written to `.profile` is a line nothing opens.
+# `config.fish` is here because fish reads none of the others and takes a syntax
+# of its own (docs/adr/0024).
+rc_candidates() {
+  printf '%s\n' \
+    "$HOME/.bashrc" \
+    "$HOME/.bash_profile" \
+    "$HOME/.zshrc" \
+    "$HOME/.profile" \
+    "$HOME/.config/fish/config.fish"
+}
+
+# The rc a machine with none at all gets, named by the shell that will read it.
+#
+# zsh is why this is not always `.profile`: zsh reads `.zshenv`, `.zprofile` and
+# `.zshrc`, and never `.profile`. A fresh macOS account and anybody who ran
+# `chsh` before writing a rc are both in that state, and the file created for
+# them used to be one their shell does not open.
+create_default_rc() {
+  case "$(login_shell)" in
+    fish)
+      mkdir -p "$HOME/.config/fish"
+      touch "$HOME/.config/fish/config.fish"
+      ;;
+    zsh) touch "$HOME/.zshrc" ;;
+    # Two files, because bash splits the job between them: a login shell reads
+    # .profile, an interactive one reads .bashrc, and neither reads the other
+    # unless a line already there says so.
+    bash) touch "$HOME/.profile" "$HOME/.bashrc" ;;
+    *) touch "$HOME/.profile" ;;
+  esac
+}
+
+# The lines that put one directory on PATH, in the syntax that file's own reader
+# takes.
+#
+# fish is neither POSIX nor near it: `export PATH=…` is a syntax error there,
+# and its PATH is a list rather than a colon-joined string. Everything else here
+# — bash, zsh, dash, ksh — reads the `case` form.
+#
+# Each form carries the same guard, so a shell that already has the directory
+# does not put it on a second time, whoever put it there first.
+#
+#   $1 the rc file the lines are going into
+#   $2 the directory
+rc_block() {
+  local rc="$1" dir="$2"
+
+  printf '\n# Added by the prep bootstrap script.\n'
+
+  case "$rc" in
+    */config.fish)
+      printf 'if not contains "%s" $PATH\n' "$dir"
+      printf '    set -gx PATH "%s" $PATH\n' "$dir"
+      printf 'end\n'
+      ;;
+    *)
+      printf 'case ":$PATH:" in\n'
+      printf '  *":%s:"*) ;;\n' "$dir"
+      printf '  *) export PATH="%s:$PATH" ;;\n' "$dir"
+      printf 'esac\n'
+      ;;
+  esac
+}
+
 persist_on_path() {
-  local dir="$1" rc written written_as
+  local dir="$1" rc written written_as any=0
 
   # A rc file may carry the directory spelled out or written through $HOME, and
   # both mean the same PATH. Either spelling counts as already done.
@@ -268,26 +355,21 @@ persist_on_path() {
     "$HOME"/*) written_as="\$HOME${dir#"$HOME"}" ;;
   esac
 
-  # Nothing to append to means nobody reads anything, so one file is created.
-  # .profile is the one every login shell reads, bash and sh alike.
-  [ -f "$HOME/.bashrc" ] || [ -f "$HOME/.zshrc" ] || [ -f "$HOME/.profile" ] ||
-    touch "$HOME/.profile"
+  # Nothing to append to means nobody reads anything, so one is created — the
+  # one this person's shell will actually read.
+  while IFS= read -r rc; do
+    if [ -f "$rc" ]; then any=1; fi
+  done < <(rc_candidates)
 
-  for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
+  [ "$any" -eq 1 ] || create_default_rc
+
+  while IFS= read -r rc; do
     [ -f "$rc" ] || continue
     grep -qF -e "$dir" -e "$written_as" "$rc" && continue
 
-    # The case is what keeps a shell that already carries the directory from
-    # putting it on a second time, whoever put it there first.
-    {
-      printf '\n# Added by the prep bootstrap script.\n'
-      printf 'case ":$PATH:" in\n'
-      printf '  *":%s:"*) ;;\n' "$dir"
-      printf '  *) export PATH="%s:$PATH" ;;\n' "$dir"
-      printf 'esac\n'
-    } >>"$rc"
-    written="$rc"
-  done
+    rc_block "$rc" "$dir" >>"$rc"
+    written="${written:+$written, }$rc"
+  done < <(rc_candidates)
 
   [ -z "${written:-}" ] || printf 'Put %s on PATH in %s.\n' "$dir" "$written"
 }
@@ -305,9 +387,20 @@ persist_on_path() {
 # Both directories go in, and in the order this run put them there, because a
 # person pasting one line should not have to know which tool came from which
 # installer. The paths are written out rather than left as `$HOME`, since this
-# is pasted into a shell that may be neither bash nor the one that ran it.
+# is pasted by hand and read by somebody deciding whether to trust it.
+#
+# It is pasted into their shell, not into this one, so it is written in their
+# shell's syntax — fish takes a list and no `export`, and would answer the POSIX
+# line with a syntax error. csh and tcsh would need a third form; neither macOS
+# nor Debian starts anybody on one, and they get the POSIX line rather than a
+# guess (docs/adr/0024).
 path_line() {
-  printf 'export PATH="%s:%s:$PATH"' "$HOME/.local/bin" "$BUN_INSTALL/bin"
+  local local_bin="$HOME/.local/bin" bun_bin="$BUN_INSTALL/bin"
+
+  case "$(login_shell)" in
+    fish) printf 'set -gx PATH "%s" "%s" $PATH' "$local_bin" "$bun_bin" ;;
+    *) printf 'export PATH="%s:%s:$PATH"' "$local_bin" "$bun_bin" ;;
+  esac
 }
 
 # owner/repo out of a GitHub clone URL. A URL pointing anywhere else returns

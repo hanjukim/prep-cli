@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 /**
  * The bootstrap script's PATH handling, run for real.
@@ -24,14 +24,37 @@ function shellFunction(name: string): string {
   return match[0];
 }
 
-/** Runs a snippet under a HOME of its own, and hands back that HOME. */
-function runInFreshHome(snippet: string, files: Record<string, string> = {}): string {
+/**
+ * Everything `persist_on_path` stands on: which shell the person runs, which
+ * files that shell reads, what to create when it reads none, and the syntax each
+ * file takes.
+ */
+const PATH_FUNCTIONS = ["login_shell", "rc_candidates", "create_default_rc", "rc_block"]
+  .concat("persist_on_path")
+  .map(shellFunction)
+  .join("\n");
+
+/**
+ * Runs a snippet under a HOME of its own, and hands back that HOME.
+ *
+ * `SHELL` is passed in rather than inherited, because which rc a machine with
+ * none gets is read off it, and the machine running the tests has one of its
+ * own. Files given as `a/b` are created with their directory.
+ */
+function runInFreshHome(
+  snippet: string,
+  files: Record<string, string> = {},
+  shell = "/bin/bash",
+): string {
   const home = mkdtempSync(join(tmpdir(), "prep-bootstrap-"));
-  for (const [name, content] of Object.entries(files)) writeFileSync(join(home, name), content);
+  for (const [name, content] of Object.entries(files)) {
+    mkdirSync(dirname(join(home, name)), { recursive: true });
+    writeFileSync(join(home, name), content);
+  }
 
   const result = Bun.spawnSync({
-    cmd: ["bash", "-c", `set -Eeuo pipefail\n${shellFunction("persist_on_path")}\n${snippet}`],
-    env: { ...process.env, HOME: home },
+    cmd: ["bash", "-c", `set -Eeuo pipefail\n${PATH_FUNCTIONS}\n${snippet}`],
+    env: { ...process.env, HOME: home, SHELL: shell },
   });
 
   if (result.exitCode !== 0) {
@@ -112,6 +135,59 @@ describe("persist_on_path", () => {
   test("with no rc file at all it writes one, because a machine like that still needs PATH", () => {
     const home = runInFreshHome('persist_on_path "$HOME/.local/bin"');
     expect(read(home, ".profile")).toContain(".local/bin");
+    // A login shell reads .profile and an interactive one reads .bashrc.
+    expect(read(home, ".bashrc")).toContain(".local/bin");
+  });
+
+  test("a zsh machine with no rc gets .zshrc, which is a file zsh reads", () => {
+    // zsh reads .zshenv, .zprofile and .zshrc, and never .profile. A fresh
+    // macOS account and anybody who ran chsh before writing a rc land here.
+    const home = runInFreshHome('persist_on_path "$HOME/.local/bin"', {}, "/bin/zsh");
+    expect(read(home, ".zshrc")).toContain(".local/bin");
+    expect(read(home, ".profile")).toBe("");
+  });
+
+  test("a fish machine with no rc gets config.fish, directory and all", () => {
+    const home = runInFreshHome('persist_on_path "$HOME/.local/bin"', {}, "/usr/bin/fish");
+    expect(read(home, ".config/fish/config.fish")).toContain(".local/bin");
+    expect(read(home, ".profile")).toBe("");
+  });
+
+  test("a shell nobody named gets .profile", () => {
+    const home = runInFreshHome('persist_on_path "$HOME/.local/bin"', {}, "");
+    expect(read(home, ".profile")).toContain(".local/bin");
+  });
+
+  test("a bash login shell reading .bash_profile is written to, not passed over", () => {
+    // bash reads the first of .bash_profile, .bash_login and .profile that
+    // exists and stops. On a machine carrying one, a line in .profile is dead.
+    const home = runInFreshHome('persist_on_path "$HOME/.local/bin"', {
+      ".bash_profile": "# mine\n",
+    });
+    expect(read(home, ".bash_profile")).toContain(".local/bin");
+  });
+
+  test("a fish config that is already there is written in fish, not in sh", () => {
+    const home = runInFreshHome('persist_on_path "$HOME/.local/bin"', {
+      ".config/fish/config.fish": "# mine\n",
+    });
+
+    const written = read(home, ".config/fish/config.fish");
+    expect(written).toContain("set -gx PATH");
+    expect(written).toContain("if not contains");
+    expect(written).not.toContain("export PATH");
+    expect(written).toContain("# mine");
+  });
+
+  test("a machine running two shells gets the line in both of their files", () => {
+    // One person, bash in one terminal and zsh in another. Neither reads the
+    // other's rc, and the run installed the tools for both.
+    const home = runInFreshHome('persist_on_path "$HOME/.local/bin"', {
+      ".bashrc": "",
+      ".zshrc": "",
+    });
+    expect(read(home, ".bashrc")).toContain(".local/bin");
+    expect(read(home, ".zshrc")).toContain(".local/bin");
   });
 
   test("the line it writes puts the directory on PATH when the rc is read", () => {
@@ -166,17 +242,79 @@ describe("persist_on_path", () => {
   });
 });
 
+/** Whether this machine holds a shell, so a test needing it can stand aside. */
+function holds(shell: string): boolean {
+  return Bun.spawnSync({ cmd: ["sh", "-c", `command -v ${shell}`] }).exitCode === 0;
+}
+
+/**
+ * What the rc lines are worth: the interpreter that reads them, reading them.
+ *
+ * Asserting on the text says the block was written. Only the shell itself says
+ * the block parses and puts the directory where it belongs — and fish, the one
+ * that needed a syntax of its own, is exactly the one a text assertion would
+ * pass while the machine failed.
+ */
+describe("the rc lines, read by the shell they were written for", () => {
+  function pathAfterReading(shell: string, rc: string, command: string): string {
+    const home = runInFreshHome('persist_on_path "$HOME/.local/bin"', { [rc]: "" }, `/bin/${shell}`);
+    const result = Bun.spawnSync({
+      cmd: [shell, "-c", command],
+      env: { ...process.env, HOME: home, PATH: "/usr/bin:/bin" },
+    });
+
+    if (result.exitCode !== 0) {
+      throw new Error(`${shell} could not read what was written: ${result.stderr.toString()}`);
+    }
+    return `${result.stdout.toString()}||${home}`;
+  }
+
+  test.skipIf(!holds("zsh"))("zsh", () => {
+    const [path, home] = pathAfterReading("zsh", ".zshrc", '. "$HOME/.zshrc"; printf "%s" "$PATH"')
+      .split("||");
+    expect(path).toContain(`${home}/.local/bin`);
+  });
+
+  test.skipIf(!holds("dash"))("dash", () => {
+    const [path, home] = pathAfterReading(
+      "dash",
+      ".profile",
+      '. "$HOME/.profile"; printf "%s" "$PATH"',
+    ).split("||");
+    expect(path).toContain(`${home}/.local/bin`);
+  });
+
+  test.skipIf(!holds("fish"))("fish", () => {
+    const home = runInFreshHome(
+      'persist_on_path "$HOME/.local/bin"',
+      { ".config/fish/config.fish": "" },
+      "/usr/bin/fish",
+    );
+    const result = Bun.spawnSync({
+      cmd: ["fish", "-c", 'source "$HOME/.config/fish/config.fish"; printf "%s" "$PATH"'],
+      env: { ...process.env, HOME: home, PATH: "/usr/bin:/bin" },
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.toString()).toContain(`${home}/.local/bin`);
+  });
+});
+
 describe("path_line", () => {
-  /** Runs path_line under a HOME of its own, and hands back what it printed. */
-  function runPathLine(): string {
+  /** Runs path_line under a HOME and a login shell of its own. */
+  function runPathLine(shell = "/bin/bash"): string {
     const home = mkdtempSync(join(tmpdir(), "prep-bootstrap-"));
     const result = Bun.spawnSync({
       cmd: [
         "bash",
         "-c",
-        `set -Eeuo pipefail\nBUN_INSTALL="$HOME/.bun"\n${shellFunction("path_line")}\npath_line`,
+        `set -Eeuo pipefail
+BUN_INSTALL="$HOME/.bun"
+${shellFunction("login_shell")}
+${shellFunction("path_line")}
+path_line`,
       ],
-      env: { ...process.env, HOME: home },
+      env: { ...process.env, HOME: home, SHELL: shell },
     });
 
     if (result.exitCode !== 0) throw new Error(`path_line failed: ${result.stderr.toString()}`);
@@ -198,6 +336,25 @@ describe("path_line", () => {
 
   test("keeps what the terminal already carries", () => {
     expect(runPathLine()).toContain(":$PATH");
+  });
+
+  test("zsh and dash take the same line bash does", () => {
+    for (const shell of ["/bin/zsh", "/bin/dash", "/usr/bin/ksh"]) {
+      expect(runPathLine(shell)).toStartWith('export PATH="');
+    }
+  });
+
+  test("fish gets fish, since the POSIX line is a syntax error there", () => {
+    const line = runPathLine("/usr/bin/fish");
+    // fish has no `export`, and its PATH is a list rather than a joined string.
+    expect(line).toStartWith("set -gx PATH ");
+    expect(line).toEndWith(" $PATH");
+    expect(line).not.toContain("export");
+    expect(line).not.toContain(":");
+  });
+
+  test("a shell nobody named falls back to the POSIX line", () => {
+    expect(runPathLine("")).toStartWith('export PATH="');
   });
 
   test("what it prints is a line a shell runs, and it puts both on PATH", () => {

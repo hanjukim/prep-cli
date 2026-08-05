@@ -430,12 +430,32 @@ Exporting covers this run only. The two tarballs edit no rc at all, and the
 installers that do — bun's and Claude Code's — edit one when they can identify
 the shell, which is another vendor's judgement about this machine. So the script
 writes both directories it exports itself, `~/.local/bin` and `~/.bun/bin`, into
-every shell rc that is already there, and into `~/.profile` where none is, each
-line guarded so a directory already on PATH is not put on twice. bun's own line
-writes the directory through a variable and this one writes what it expands to,
-so neither finds the other and a shell reading both still carries it once. That
-is what makes the new terminal at the end carry what this run installed —
-`claude` and `prep` alike (docs/adr/0024).
+every shell rc that is already there, each line guarded so a directory already on
+PATH is not put on twice. bun's own line writes the directory through a variable
+and this one writes what it expands to, so neither finds the other and a shell
+reading both still carries it once. That is what makes the new terminal at the
+end carry what this run installed — `claude` and `prep` alike (docs/adr/0024).
+
+**Which files those are is a question about shells, not about bash.** The list is
+`~/.bashrc`, `~/.bash_profile`, `~/.zshrc`, `~/.profile` and
+`~/.config/fish/config.fish`. `.bash_profile` is on it because a bash login shell
+reads the first of `.bash_profile`, `.bash_login` and `.profile` that exists and
+stops, so a machine carrying one never reads what was written to `.profile`.
+`config.fish` is on it because fish reads none of the others and answers
+`export PATH=…` with a syntax error, so the block written there is fish —
+`if not contains` and `set -gx PATH` — chosen off the file being written into.
+Every file that exists is written to rather than the one `$SHELL` names, because
+one person runs bash in one terminal and zsh in another and this run installed
+the tools for both.
+
+`$SHELL` decides one thing: which file to create where none exists at all. That
+used to be `~/.profile` always, and zsh never reads `~/.profile` — a fresh macOS
+account and anybody who ran `chsh` before writing a rc got a file their own shell
+does not open. So it is `~/.zshrc` for zsh, `config.fish` for fish, `.profile`
+and `.bashrc` together for bash, and `.profile` for anything else. csh and tcsh
+get the POSIX line and no branch of their own: they would need a third syntax and
+a fourth set of files, neither platform starts anybody on one, and a guess
+written into a rc is worse than a line somebody adapts (docs/adr/0024).
 
 **The one terminal no rc file reaches is the one running the script.** It read
 its rc before any of this existed, so a command named for a person to run
@@ -443,7 +463,8 @@ themselves is named by its full path — `$GH_BIN auth login`, not `gh auth logi
 That works for one command and does not carry: by the time somebody wants
 `prep doctor` or `claude` in that terminal, writing every name out in full is
 worse than handing the PATH over once. So the script prints the line that gives
-this terminal both directories, at the two places a run ends — the stop at
+this terminal both directories — in that person's own shell syntax, since fish
+would answer the POSIX one with a syntax error — at the two places a run ends — the stop at
 step 9, where a person is asked to work in that terminal and never sees the
 closing message, and the top of the closing message itself, ahead of every line
 that names a tool. The stop at step 9 also names the `curl … | bash` that

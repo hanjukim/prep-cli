@@ -37,6 +37,20 @@ vendor's judgement about this machine, and ADR-0022 is the record of what taking
 one costs. When it goes the other way, a new terminal carries `claude` and not
 `prep`.
 
+**And the rc half was written for bash and asked of everybody.** It appended to
+`~/.bashrc`, `~/.zshrc` and `~/.profile`, created `~/.profile` where none of the
+three stood, and emitted one POSIX block. Three shells fall through that:
+
+- **zsh with no `~/.zshrc`.** zsh reads `.zshenv`, `.zprofile` and `.zshrc`, and
+  never `.profile` — so the file created for such a machine is one its own shell
+  does not open. A fresh macOS account is in that state, and so is anybody who
+  ran `chsh` before writing a rc.
+- **bash with a `~/.bash_profile`.** A bash login shell reads the first of
+  `.bash_profile`, `.bash_login` and `.profile` that exists and stops there. On a
+  machine carrying one, every line written to `.profile` is a line nothing reads.
+- **fish.** It reads none of those files, and `export PATH=…` is a syntax error
+  in it. Both halves were wrong for fish: the file and the language.
+
 ## Decision
 
 **The script hands over a PATH along with every command it hands over.**
@@ -60,6 +74,26 @@ one costs. When it goes the other way, a new terminal carries `claude` and not
    sentence and it needs no paste. The line is the answer for somebody who is
    already standing in this terminal with work to do in it, which is exactly
    where step 9 leaves them.
+5. **The login shell is read once, and both halves are driven off it.**
+   `login_shell` takes the name out of `$SHELL`, falling back to the password
+   database where a container or a `su` left it unset. It decides which rc a
+   machine with none gets — `.zshrc` for zsh, `config.fish` for fish, `.profile`
+   and `.bashrc` together for bash, `.profile` for anything else — and it
+   decides the syntax `path_line` prints.
+6. **Every rc that is already there is still written to, and the list grows by
+   two.** `~/.bash_profile`, so a bash login shell that stops there is not passed
+   over, and `~/.config/fish/config.fish`. One person may run bash in one
+   terminal and zsh in another, and this run installed the tools for both, so
+   the rule stays "every file that exists" rather than "the one file `$SHELL`
+   names". `$SHELL` decides only what to create where nothing exists at all.
+7. **fish gets fish, everywhere it appears.** `rc_block` picks its syntax off
+   the file it is writing into — `if not contains … / set -gx PATH … / end` for
+   `config.fish`, the `case` form for everything else — and `path_line` prints
+   `set -gx PATH …` when the login shell is fish.
+8. **csh and tcsh get the POSIX line and no special case.** They would need a
+   third syntax (`setenv`) and a fourth set of rc files, and neither macOS nor
+   Debian starts anybody on one. A guess written into a rc file is worse than a
+   line somebody has to adapt, so this is written down rather than attempted.
 
 ## Rationale
 
@@ -77,10 +111,21 @@ one costs. When it goes the other way, a new terminal carries `claude` and not
   installer at its word that a rc got written. The script now writes what it
   depends on.
 - **`source ~/.bashrc` was not chosen, though it is what the person ran.** It is
-  shorter, and it is wrong on two counts: it names one rc out of the several the
-  script may have written to, and on a machine where bun's installer wrote
-  nothing it sources a file that never carried `~/.bun/bin` either. The export
-  line says what it does and does not depend on which shell is reading it.
+  shorter, and it is wrong on three counts: it names one rc out of the several
+  the script may have written to, on a machine where bun's installer wrote
+  nothing it sources a file that never carried `~/.bun/bin` either, and it is
+  the wrong file for anybody not running bash. The `export` line says what it
+  does, and where it would be wrong — fish — the shell gets its own.
+- **The rc list stayed a list, and only the creation rule reads `$SHELL`.**
+  Writing to the one file `$SHELL` names would be the tidier rule and it loses
+  the person who runs bash in one terminal and zsh in another. A rc that already
+  exists is evidence somebody reads it; `$SHELL` is only needed where there is
+  no evidence at all.
+- **fish earned a branch and csh did not.** fish is a default nowhere but a
+  chosen shell in many places, and it fails loudly and immediately on the POSIX
+  line — a syntax error at every new terminal. csh is chosen by very few, and
+  supporting it half way, with a syntax nobody here runs, would add a file this
+  script writes and cannot check.
 
 ## Consequences
 
@@ -93,6 +138,14 @@ one costs. When it goes the other way, a new terminal carries `claude` and not
 - A rc file may carry two blocks for `~/.bun/bin`, one bun's and one this
   script's. A shell reading both puts the directory on PATH once, and the test
   suite holds that.
+- A zsh machine with no rc gets a `~/.zshrc` this script created. That file is
+  read by every interactive zsh from then on, which is what was wanted and is
+  also a file somebody did not ask for. It carries one guarded block and says
+  who wrote it.
+- A machine running two shells gets the block in both of their files. The guard
+  in each keeps that from meaning the directory twice.
+- The tests read the written rc back with the shell it was written for, so zsh
+  and dash are checked by their own interpreters rather than by a string match.
 
 ## Unverified
 
@@ -101,3 +154,9 @@ read, the functions are tested against a HOME of their own, and the rc that bun
 writes was reproduced from its published installer rather than observed on the
 machine that failed. A run on WSL with Ubuntu, stopping at step 9 and carrying
 on from that terminal, is the acceptance test.
+
+**fish was written from its documentation, not run.** No fish is installed on
+the machine this was written on, so the test that reads `config.fish` back with
+fish stands aside there; zsh and dash do run. The block and the pasted line are
+both plain fish — `if not contains`, `set -gx PATH` — but nothing has executed
+them. Installing fish on a machine with one is the check.
