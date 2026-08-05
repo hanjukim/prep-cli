@@ -5,6 +5,9 @@
 question ADR-0020 left open. The chain rule that record states is untouched:
 the chain still carries what the destination needs at run time. What changes is
 where one link falls, now that one of the two clones behind it has gone away.
+ADR-0025 keeps decision 4 and moves what it hands over: the identity and the
+GitHub login are still named on the machine-only ending, now under its reference
+heading rather than as the thing to do next.
 **Sources:** ADR-0009, ADR-0013, ADR-0015, ADR-0017, ADR-0020, issue #2, an
 observed refusal from `gh repo view` on a public repository with no login, and a
 real `curl … | bash` run on WSL on 2026-08-05

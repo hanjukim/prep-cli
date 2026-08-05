@@ -33,10 +33,11 @@ the one question in the script whose refusal is an ending rather than a stop —
 Enter closes the run the way a run with nothing to clone already closed. Two
 runs are never asked at all: one that set `PREPARED_REPO` in the environment
 has answered ahead of the question (docs/adr/0015), and one with no terminal
-has nobody to ask, so its closing message names the variable rather than the
-question. A run that clones ends by printing the two commands that finish the
-job, `cd` into the project and `claude`, because a script cannot move the shell
-that called it. On macOS
+has nobody to ask, so it takes the same ending Enter takes — the machine-only
+one, whose next action is a `git clone` neither run needs a terminal for
+(docs/adr/0025). A run that clones ends by printing the two commands that finish
+the job, `cd` into the project and `claude`, because a script cannot move the
+shell that called it. On macOS
 the brew installer pulls in the Command Line Tools, so git arrives with it; on
 Linux apt is already the system, so it starts with `sudo apt install git`. The
 script carries no tool list of its own — **prep decides and the script
@@ -100,12 +101,30 @@ finished, and it is printed ahead of the two identity commands — the order the
 project branch runs the pair in — because a login is what turns those commands
 into answers somebody can be offered. The third is the Claude Code login: the
 first `claude` run authenticates through a browser, which the script cannot do
-for anybody. The script's closing message is where that is said, and it is said
-nowhere else: whoever ran the one-liner is looking at that terminal, not at a
-page they would have had to find first. It names the account the login needs —
-Claude Code carries a paid plan only — and it names Codex's own login, since
-doctor goes on to report Codex as a gap and installing it opens the same
-question again.
+for anybody. **The two browser logins are handed over together wherever a run
+ends in front of one**, so somebody opens a browser once: the closing message
+says the Claude Code login, and so does the stop at the GitHub login, which is a
+run that ends before reaching the closing message at all (docs/adr/0025). One
+wording says it in both places — `claude_login_note` — and it names the account
+the login needs, since Claude Code carries a paid plan only. Codex's own login is
+named on the ending alone, because doctor goes on to report Codex as a gap and
+installing it opens the same question again, and nothing about that is waiting on
+a browser this trip.
+
+**The ending names one next action, and prints everything else as reference.**
+A finished run has several things to report — where the project is, gaps that
+would not close, two logins no script can perform, a command that reads the
+machine — and exactly one of them is the thing to do next. That one is the **next
+action**: drawn between two rules under a `Next:` headline, with the commands that
+perform it and nothing else, above a `For reference` heading that turns the rest
+into reference (docs/adr/0025). Somebody who reads the first block and stops has
+read the thing to do. A run that cloned points at the project it just prepared —
+`cd` and `claude`. A run that stopped at the machine points at getting one —
+`git clone` and `prep setup`, ordinary commands by then, since prep is installed:
+**the ending never sends anybody back through the entry point.** Re-running the
+one-liner belongs to the stops, which resume where they stopped; a finished run
+has nothing to resume, and asking for a second download to answer one question
+was the one thing that ending got wrong.
 
 **An account that cannot see a repository is not a broken machine.** Before the
 project clone the script asks `gh repo view`, an authenticated question, and a
@@ -195,7 +214,8 @@ line that decides whether the next command somebody types is found. A run whose
 output is a log rather than a terminal, and a run under `NO_COLOR`, get the same
 words without the escape codes. The two places are the stop at step 9, where a
 person is asked to work in that terminal and never sees the closing message, and
-the top of the closing message itself, ahead of every line that names a tool. The stop at step 9 also names the `curl … | bash` that
+the **next action** on the closing message, where it leads the commands it makes
+findable. The stop at step 9 also names the `curl … | bash` that
 resumes the run, since it is the one handover asking for two commands. Opening a
 new terminal is still what is offered first: it is shorter and needs no paste
 (docs/adr/0024).

@@ -104,10 +104,10 @@ PREP_SHARE="${PREP_SHARE:-$HOME/.local/share/prep}"
 
 # Emphasis, where there is a terminal to take it.
 #
-# This script prints one instruction a person has to act on — the file that
-# gives their terminal the tools — and it is printed among a screen of install
-# output they have just watched scroll by. Everything here exists to keep that
-# one thing from being scrolled past (docs/adr/0024).
+# This script ends by asking a person to do one thing, and the first line of it
+# is the file that gives their terminal the tools. That block is printed among a
+# screen of install output they have just watched scroll by, and everything here
+# exists to keep it from being scrolled past (docs/adr/0024, docs/adr/0025).
 #
 # A run whose output is a file or a pipe gets none of it, because escape codes
 # in a log are noise rather than emphasis, and NO_COLOR is honoured because
@@ -458,20 +458,31 @@ env_line() {
   esac
 }
 
-# The same line, drawn so nobody scrolls past it.
+# The one thing a finished run asks somebody to do, drawn so nobody scrolls past
+# it (docs/adr/0025).
 #
-# It is the one instruction in this whole run that decides whether the next
-# command somebody types is found, and it arrives at the end of a screen of
-# install output. Rules above and below mark where the progress stops and the
-# instruction starts, and the command itself is the only thing on the screen in
-# reverse video.
-announce_env_line() {
+# A run reports several things and exactly one of them is the next action, so
+# that one is printed alone, above the heading that turns the rest into
+# reference. Rules above and below mark where the install output stops and the
+# instruction starts.
+#
+# The env line leads the commands and carries the reverse video, because it is
+# the one line here that decides whether the lines under it are found at all
+# (docs/adr/0024): this terminal started before any of these tools existed, and
+# a shell reads its rc once. The rest of the block is the caller's — a headline
+# naming the action, and the commands that perform it.
+announce_next_action() {
+  local headline="$1" line
+  shift
+
   printf '\n%s\n' "$RULE"
-  printf '%sThis terminal does not carry the tools this run installed.%s\n' "$BOLD" "$RESET"
-  printf 'It started before they existed, and a shell reads its rc once.\n'
-  printf '\n    %s %s %s\n\n' "$REVERSE$BOLD" "$(env_line)" "$RESET"
-  printf 'Run that line here — or open a new terminal, which carries them\n'
-  printf 'already.\n'
+  printf '%sNext: %s%s\n\n' "$BOLD" "$headline" "$RESET"
+  printf '    %s %s %s\n' "$REVERSE$BOLD" "$(env_line)" "$RESET"
+  for line in "$@"; do
+    printf '      %s\n' "$line"
+  done
+  printf '\nThe first line hands this terminal the tools this run installed. A\n'
+  printf 'terminal opened now carries them already, and needs only the rest.\n'
   printf '%s\n' "$RULE"
 }
 
@@ -525,6 +536,25 @@ Everything installed so far stays installed, and the script skips it."
   fi
 }
 
+# The Claude Code login, in one wording, printed from both places that send
+# somebody to a browser (docs/adr/0025).
+#
+# The first `claude` run authenticates through a browser, and no script can do
+# that for anybody. Neither can the GitHub login, and somebody already at a
+# browser for one should be there for both — so the stop below says this as well
+# as the closing message. It used to be said in the closing message alone, which
+# that stop exits before reaching. The script's other stops send nobody to a
+# browser, and each of them reaches the closing message on the run that follows
+# it.
+claude_login_note() {
+  cat <<'MESSAGE'
+Logging in to Claude Code is a browser step, and the first `claude` run is what
+opens it. Claude Code needs a paid account: Pro, Max, Team, Enterprise or
+Console. The free Claude.ai plan does not carry it, and the login turns you away
+on one.
+MESSAGE
+}
+
 # The one stop this script makes for a person mid-run. A private repository
 # answers an unauthenticated request with 404 rather than a refusal, so a clone
 # without a login fails while describing the wrong problem, and no login is what
@@ -539,9 +569,10 @@ Everything installed so far stays installed, and the script skips it."
 # this script is running from a pipe, so handing it /dev/tty is not enough — a
 # real run answered with "could not prompt: unexpected escape sequence from
 # terminal". Carrying a dependency and performing an authentication are different
-# things: the script installs gh and then hands the login to the person, the same
-# way it hands over the Claude Code login at the end (docs/adr/0009,
-# docs/adr/0013 decision 5).
+# things: the script installs gh and then hands the login to the person
+# (docs/adr/0009, docs/adr/0013 decision 5). It hands the Claude Code login over
+# in the same message, because this run ends here and one browser trip answers
+# both (docs/adr/0025).
 require_github_login() {
   if gh auth status >/dev/null 2>&1; then
     echo "gh is already logged in."
@@ -569,7 +600,12 @@ The login prints a one-time code. If no browser opens, open
 https://github.com/login/device in any browser you can reach and enter the code
 there.
 
-Everything installed so far stays installed, and the second run skips it."
+Everything installed so far stays installed, and the second run skips it.
+
+One more browser login is waiting behind this one, and doing both now saves a
+second trip:
+
+$(claude_login_note)"
   fi
 
   # The login stores a token; this is what teaches git to send it, so a plain
@@ -1033,101 +1069,100 @@ fi
 # What is left
 # ---------------------------------------------------------------------------
 
-printf '\n==> Done\n'
-
-# A script cannot move the shell that called it, so the lines that finish the
-# job are printed rather than run. They are given in full, ready to paste.
+# What a finished run says, and in what order (docs/adr/0025).
 #
-# This terminal is the one shell no rc file this run wrote will ever reach, and
-# every line below names a tool by a name it does not know yet. So the line that
-# fixes it comes first, before any of them (docs/adr/0024).
-announce_env_line
+# A run has several things to report — where the project is, gaps that would not
+# install, two logins it cannot perform, a command that reads the machine — and
+# exactly one of them is the next action. So that one is drawn on its own above a
+# heading that turns everything after it into reference, and somebody who reads
+# the first block and stops has read the thing to do.
+#
+# A script cannot move the shell that called it, nor log in for anybody, so every
+# command here is printed rather than run, in full and ready to paste.
+closing_message() {
+  printf '\n==> Done\n'
 
-if [ "$PROJECT_READY" -eq 1 ]; then
-  printf '\nYour project is at %s\n' "$PROJECT_DIR"
-  printf '\nStart working — run these two lines:\n'
-  printf '  cd %s\n' "$PROJECT_DIR"
-  printf '  claude\n'
-else
-  # The machine is finished and the project is the only thing outstanding, so
-  # the line that comes back for it is the one worth printing. Everything
-  # already installed is skipped on that second run.
-  printf '\nThis machine is ready. No project was named, so nothing was cloned\n'
-  printf 'and nothing was set up.\n'
-
-  # gh is installed here and logged in to nothing, because this run cloned
-  # nothing that needed an account (docs/adr/0021). The work this machine is for
-  # does need one: this script is served from GitHub, and the guidance prep
-  # writes points its agents at a GitHub tracker they reach through gh. So the
-  # login is named here rather than left to be discovered at the first `gh issue
-  # list` that refuses. It is named rather than run for the reason the project
-  # step names it too — the login reads the terminal itself, and this script is
-  # reading a pipe.
-  #
-  # It comes before the identity below, the same order the project branch runs
-  # them in, because it is what turns the two commands below into answers
-  # somebody can be offered.
-  if ! gh auth status >/dev/null 2>&1; then
-    printf '\ngh is installed and logged in to nothing. This run needed no account,\n'
-    printf 'and the work after it will: cloning anything private, opening an issue,\n'
-    printf 'pushing a branch. Log in when it suits you:\n'
-    printf '  %s auth login --git-protocol https --web\n' "$GH_BIN"
-    printf 'The path is written out in full because this terminal has not read a\n'
-    printf 'shell rc since gh was installed. A new terminal carries it by name.\n'
-    printf 'It prints a one-time code. If no browser opens, open\n'
-    printf 'https://github.com/login/device in any browser and enter the code there.\n'
-  fi
-
-  # The identity sits behind the GitHub login, and both belong to the project
-  # branch this run did not take (docs/adr/0021). So it is named here rather
-  # than asked for — this is where a run that stops at the machine reads what is
-  # left for it, the same as the Claude Code login below. A second run that
-  # names a project logs in first and offers both answers instead.
-  if [ -z "$(git config --get user.name 2>/dev/null || true)" ] ||
-    [ -z "$(git config --get user.email 2>/dev/null || true)" ]; then
-    printf '\ngit has no name and email to commit under yet, and every commit\n'
-    printf 'needs both. Set them yourself:\n'
-    printf '  git config --global user.name "Your Name"\n'
-    printf '  git config --global user.email "you@example.com"\n'
-    printf 'Or leave them — log in above, run this again with a project, and it\n'
-    printf 'asks GitHub and offers you both answers.\n'
-  fi
-
-  if have_tty; then
-    printf '\nWhen you have the repository you are working in, run this again and\n'
-    printf 'answer the last step — everything above it is skipped:\n'
-    printf '  curl -fsSL %s | bash\n' "$SCRIPT_URL"
+  if [ "$PROJECT_READY" -eq 1 ]; then
+    announce_next_action "start working in your project." \
+      "cd $PROJECT_DIR" \
+      "claude"
   else
-    # There was no terminal to ask on, and a second run in the same place would
-    # have none either. The environment is how a run like that names a project,
-    # so it is the line worth printing here — the question is not.
-    printf '\nThere was no terminal here, so nobody could be asked which repository\n'
-    printf 'this is for. Name it in the environment and run this again:\n'
-    printf '  curl -fsSL %s | PREPARED_REPO=<git url> bash\n' "$SCRIPT_URL"
+    # The machine is finished and the project is the only thing outstanding. By
+    # now prep is installed, so the two commands that finish the job are ordinary
+    # ones — nobody is sent back through the one-liner to answer one question,
+    # and neither command needs a terminal to be asked on, which is what the
+    # no-terminal branch here used to be for.
+    announce_next_action "clone the project you came here to work in, and set it up." \
+      'git clone "<git url>" ~/my-project' \
+      "prep setup ~/my-project"
   fi
-fi
 
-if [ -n "$FAILED_GAPS" ]; then
-  printf '\nThese would not install. Run them yourself when you have a moment:\n'
-  printf '%s' "$FAILED_GAPS"
-fi
+  printf '\n==> For reference\n'
 
-# The one step a script cannot take for anybody (docs/adr/0013 decision 5).
-#
-# It is said here and nowhere else. Somebody who ran the one-liner is looking at
-# this terminal, not at a page they would have had to find first, and the login
-# is what stands between them and a working session.
-cat <<'MESSAGE'
+  # This run's own leftovers come first: they are the only lines here about what
+  # just happened rather than about what always holds.
+  if [ -n "$FAILED_GAPS" ]; then
+    printf '\nThese would not install. Run them yourself when you have a moment:\n'
+    printf '%s' "$FAILED_GAPS"
+  fi
 
-One thing is left for you: logging in to Claude Code. The first `claude` run
-opens a browser and asks for it. After that you are set.
+  if [ "$PROJECT_READY" -eq 0 ]; then
+    # gh is installed here and logged in to nothing, because this run cloned
+    # nothing that needed an account (docs/adr/0021). The work this machine is
+    # for does need one: the clone above is private for many people, and an
+    # unauthenticated request for a private repository comes back 404 rather than
+    # a refusal, so it fails while describing the wrong problem. Beyond that,
+    # this script is served from GitHub and the guidance prep writes points its
+    # agents at a GitHub tracker they reach through gh.
+    #
+    # It is named rather than run for the reason the project step names it too —
+    # the login reads the terminal itself, and this script is reading a pipe. And
+    # it comes before the identity below, the same order the project branch runs
+    # them in, because it is what turns those two commands into answers somebody
+    # can be offered.
+    if ! gh auth status >/dev/null 2>&1; then
+      printf '\ngh is installed and logged in to nothing. This run needed no account,\n'
+      printf 'and the clone above may: a private repository answers an unauthenticated\n'
+      printf 'request with 404 rather than a refusal. Log in before it, or when it\n'
+      printf 'suits you:\n'
+      printf '  %s auth login --git-protocol https --web\n' "$GH_BIN"
+      printf 'The path is written out in full for a terminal that has read neither the\n'
+      printf 'line above nor a shell rc since gh was installed. It prints a one-time\n'
+      printf 'code. If no browser opens, open https://github.com/login/device in any\n'
+      printf 'browser and enter the code there.\n'
+    fi
 
-Claude Code needs a paid account: Pro, Max, Team, Enterprise or Console. The
-free Claude.ai plan does not carry it, and the login turns you away on one.
+    # The identity sits behind the GitHub login, and both belong to the project
+    # branch this run did not take (docs/adr/0021). So it is named here rather
+    # than asked for — this is where a run that stops at the machine reads what is
+    # left for it. A second run that names a project logs in first and offers
+    # both answers instead.
+    if [ -z "$(git config --get user.name 2>/dev/null || true)" ] ||
+      [ -z "$(git config --get user.email 2>/dev/null || true)" ]; then
+      printf '\ngit has no name and email to commit under yet, and every commit needs\n'
+      printf 'both. Set them yourself:\n'
+      printf '  git config --global user.name "Your Name"\n'
+      printf '  git config --global user.email "you@example.com"\n'
+      printf 'Or leave them — log in above, run this script again with a project, and\n'
+      printf 'it asks GitHub and offers you both answers.\n'
+    fi
+  fi
+
+  # The one step a script cannot take for anybody (docs/adr/0013 decision 5).
+  # Somebody who ran the one-liner is looking at this terminal, not at a page
+  # they would have had to find first. The stop in front of the GitHub login says
+  # the same words, because that run ends before reaching here (docs/adr/0025).
+  printf '\n'
+  claude_login_note
+
+  cat <<'MESSAGE'
 
 Codex is not part of this script. Install it and it asks for a login of its
 own: a ChatGPT Plus, Pro, Business, Edu or Enterprise account, or an OpenAI
 API key.
 
-To see what your machine is still missing at any time, run: prep doctor
+prep doctor says what this machine is still missing, at any time.
 MESSAGE
+}
+
+closing_message

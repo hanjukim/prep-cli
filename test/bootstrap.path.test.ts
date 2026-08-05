@@ -465,7 +465,7 @@ env_line`,
   });
 });
 
-describe("announce_env_line", () => {
+describe("announce_next_action", () => {
   /** The script's own colour guard and rule, lifted whole rather than restated. */
   const EMPHASIS = SCRIPT.slice(SCRIPT.indexOf('BOLD=""'), SCRIPT.indexOf("# The step being run"));
 
@@ -476,6 +476,10 @@ describe("announce_env_line", () => {
    * or a `| tee` is in — so the guard runs for real and leaves the variables
    * empty. `tty` sets afterwards what the guard would have set on a terminal,
    * since a pty cannot be arranged from here.
+   *
+   * The headline and the commands under the env line are the caller's, and what
+   * this file is about is the env line the block leads with (docs/adr/0024).
+   * `test/bootstrap.ending.test.ts` is where the callers are run.
    */
   function announce(tty: boolean, env: Record<string, string> = {}): string {
     const home = mkdtempSync(join(tmpdir(), "prep-bootstrap-"));
@@ -493,24 +497,25 @@ ${EMPHASIS}
 ${tty ? asTerminal : ""}
 ${shellFunction("login_shell")}
 ${shellFunction("env_line")}
-${shellFunction("announce_env_line")}
-announce_env_line`,
+${shellFunction("announce_next_action")}
+announce_next_action "start working in your project." "cd ~/a-project" "claude"`,
       ],
       env: { ...process.env, HOME: home, ...env },
     });
 
     if (result.exitCode !== 0) {
-      throw new Error(`announce_env_line failed: ${result.stderr.toString()}`);
+      throw new Error(`announce_next_action failed: ${result.stderr.toString()}`);
     }
     return result.stdout.toString();
   }
 
   const ESC = "\u001b";
 
-  test("the line to run is in it, and it is the only command in it", () => {
+  test("the line to run leads the commands, since it is what finds them", () => {
     const block = announce(false);
     expect(block).toContain("/.local/share/prep/env.sh");
-    expect(block).toContain("open a new terminal");
+    expect(block).toContain("terminal opened now carries them already");
+    expect(block.indexOf("/env.sh")).toBeLessThan(block.indexOf("cd ~/a-project"));
   });
 
   test("rules mark where the install output stops and the instruction starts", () => {
@@ -562,10 +567,15 @@ describe("the commands the script hands to a person", () => {
 
   test("the closing message hands this terminal its PATH before naming a tool", () => {
     const done = SCRIPT.slice(SCRIPT.indexOf("==> Done"));
-    expect(done).toContain("announce_env_line");
-    // Ahead of `cd`/`claude` and ahead of the second-run line, because every one
-    // of them is a name this shell does not carry yet.
-    expect(done.indexOf("announce_env_line")).toBeLessThan(done.indexOf("claude\\n"));
+    // Every command a finished run prints as the thing to do goes through this
+    // one block, which prints the env line ahead of them (docs/adr/0025). So
+    // `cd`, `claude`, `git clone` and `prep setup` are arguments to it rather
+    // than lines of their own, and none of them can drift above it.
+    expect(done).toContain("announce_next_action");
+    expect(done).not.toContain("printf '  claude");
+    for (const command of ['"claude"', '"prep setup ~/my-project"']) {
+      expect(done.indexOf("announce_next_action")).toBeLessThan(done.indexOf(command));
+    }
   });
 
   test("the file they are sent to read is written before any step can stop", () => {
