@@ -440,14 +440,31 @@ themselves is named by its full path — `$GH_BIN auth login`, not `gh auth logi
 The login below is the one place that matters, since it is the only command the
 script hands back mid-run.
 
+**A tool this machine holds is one installed for this machine.** Every install
+is guarded by whether the binary is already there, and on WSL that question has
+a wrong answer available: Windows drives are mounted under `/mnt`, their
+executables are on the Linux PATH, and a Windows npm install of Claude Code
+answers `claude` from there. A real run took one, skipped its own install, and
+ran a Windows Claude Code under the Linux Node the chain had just put on PATH —
+old enough that the marketplace refused 271 of its 278 plugins (docs/adr/0022).
+So the guard resolves the name and reads the path back, and an executable under
+`/mnt` is not an answer. The rule sits in that one guard rather than at the step
+where it was found, because every link is looked up the same way. What is
+already installed on this machine's own side is kept, however old: which
+operating system a tool belongs to is the question, and its version number is
+not.
+
 **A link stops the run, a gap does not.** The chain is what the destination
 depends on, so a step that fails names itself and ends the run — and because
-every install is guarded by whether the binary is already there, every clone by
-whether the directory is already there, and the login by whether there is one
-already, running the script again picks up where it stopped. What comes back
-from `--json` is a different kind of thing: a machine missing `fd` is an
-inconvenience, so a gap that will not close is collected and printed at the end,
-and the project still gets set up.
+every install is guarded, every clone by whether the directory is already there,
+and the login by whether there is one already, running the script again picks up
+where it stopped. What comes back from `--json` is a different kind of thing: a
+machine missing `fd` is an inconvenience, so a gap that will not close is
+collected and printed at the end, and the project still gets set up. **The
+harness's plugins are gaps too** (docs/adr/0022). The harness is a link because
+without it nobody reads the permission files `prep setup` writes; a plugin has
+no such claim, and a marketplace is somebody else's file whose schema moves. A
+run that lost a whole machine to one is what that costs, and it happened.
 
 **Only the script changes the machine.** prep starts no process on any path
 (docs/adr/0010). doctor reads, decides, and reports, naming a command or a

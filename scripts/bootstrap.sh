@@ -116,8 +116,27 @@ fail() {
   exit 1
 }
 
+# Whether this machine holds a tool, on this machine's own terms.
+#
+# WSL puts the Windows PATH on the Linux PATH, so `command -v` answers with
+# executables under /mnt/c that belong to the other operating system. A Windows
+# npm install of Claude Code answers `claude` this way, and taking it skips the
+# install that belongs here and then drives somebody else's copy: a real run did
+# exactly that, ran the Windows shim under the Linux node this script had just
+# put on PATH, and reached the plugin step with a Claude Code too old to read the
+# marketplace it was handed (docs/adr/0022). Every tool in the chain is exposed
+# to this, not only that one, so the rule lives here rather than at one step.
 have() {
-  command -v "$1" >/dev/null 2>&1
+  local path
+  path="$(command -v "$1" 2>/dev/null)" || return 1
+
+  case "$path" in
+    # A Windows drive mounted into WSL. What lives there was installed for
+    # another operating system, whatever it answers to.
+    /mnt/*) return 1 ;;
+  esac
+
+  [ -n "$path" ]
 }
 
 # The one-liner pipes this script into bash, so stdin carries the script's own
@@ -632,11 +651,28 @@ claude --version
 # Every line is idempotent. A marketplace already declared and a plugin already
 # installed both report so and exit 0, which is what makes a second run of this
 # script pass straight through.
+#
+# **A plugin is a gap, not a link.** The harness starts without one, so a
+# marketplace that will not add is collected and printed at the end rather than
+# ending a run that has not installed prep yet (docs/adr/0022). A marketplace is
+# somebody else's file and its schema moves; a run that lost the whole machine to
+# one is the failure this guards against, and a real run lost one that way.
+#
+# stdin is closed for the reason step 8 closes it: this script is read from a
+# pipe, so a command that reads a line eats the script behind it.
 echo "Installing the plugins this project's loop uses."
-claude plugin marketplace add anthropics/claude-plugins-official
-claude plugin marketplace add JuliusBrussee/caveman
-claude plugin install mattpocock-skills@claude-plugins-official
-claude plugin install caveman@caveman
+
+install_plugin() {
+  if ! "$@" </dev/null; then
+    printf 'That one did not install. Carrying on.\n' >&2
+    FAILED_GAPS="${FAILED_GAPS}  $*"$'\n'
+  fi
+}
+
+install_plugin claude plugin marketplace add anthropics/claude-plugins-official
+install_plugin claude plugin marketplace add JuliusBrussee/caveman
+install_plugin claude plugin install mattpocock-skills@claude-plugins-official
+install_plugin claude plugin install caveman@caveman
 
 # ---------------------------------------------------------------------------
 # 7. prep

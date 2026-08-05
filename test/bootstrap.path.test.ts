@@ -48,6 +48,42 @@ const read = (home: string, name: string): string => {
   }
 };
 
+/** Runs a snippet with `have` in scope, and hands back what it printed. */
+function runWithHave(snippet: string): string {
+  const result = Bun.spawnSync({
+    cmd: ["bash", "-c", `set -Eeuo pipefail\n${shellFunction("have")}\n${snippet}`],
+  });
+
+  if (result.exitCode !== 0) {
+    throw new Error(`the snippet failed: ${result.stderr.toString()}`);
+  }
+  return result.stdout.toString().trim();
+}
+
+describe("have", () => {
+  test("finds a tool this machine actually holds", () => {
+    expect(runWithHave("have bash && echo yes || echo no")).toBe("yes");
+  });
+
+  test("does not find one this machine does not hold", () => {
+    expect(runWithHave("have no-such-tool-xyz && echo yes || echo no")).toBe("no");
+  });
+
+  // WSL puts the Windows PATH on the Linux PATH, so a tool installed for Windows
+  // answers here. Taking it skips the install that belongs on this machine
+  // (docs/adr/0022). `command` is overridden rather than /mnt being created,
+  // because the test has to run on a machine that has no /mnt at all.
+  test("refuses a Windows executable reached through a WSL mount", () => {
+    const windowsClaude = "command() { echo /mnt/c/Users/x/AppData/Roaming/npm/claude; }";
+    expect(runWithHave(`${windowsClaude}\nhave claude && echo yes || echo no`)).toBe("no");
+  });
+
+  test("takes a tool of the same name that is not under a mount", () => {
+    const linuxClaude = 'command() { echo "$HOME/.local/bin/claude"; }';
+    expect(runWithHave(`${linuxClaude}\nhave claude && echo yes || echo no`)).toBe("yes");
+  });
+});
+
 describe("persist_on_path", () => {
   test("writes the directory into every shell rc that is already there", () => {
     const home = runInFreshHome('persist_on_path "$HOME/.local/bin"', {
