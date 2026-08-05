@@ -238,6 +238,39 @@ install_tarball() {
   done
 }
 
+# Gives a renamed executable back the name it is called by.
+#
+# Debian family installs two of the standard tools under a name that is not
+# their own: fd-find leaves fdfind, and bat leaves batcat to keep clear of an
+# unrelated bat already in Debian. prep reports both installed, because the
+# registry holds the second name — but `fd` and `bat` are what anything calling
+# them calls them, and on such a machine neither name answers (docs/adr/0023).
+#
+# The links land in ~/.local/bin, the same directory the tarballs above unpack
+# into and the one directory this script puts on PATH itself.
+#
+# stdin carries one link per line, the name and the path separated by a tab,
+# which is what scripts/links.ts reads out of a doctor report. Nothing to link
+# is an empty stdin and this loop does not run.
+link_renamed() {
+  local name target
+  mkdir -p "$HOME/.local/bin"
+
+  while IFS=$'\t' read -r name target; do
+    # A machine where the name already answers is left alone. It holds the real
+    # tool under its real name — built from source, installed from cargo, taken
+    # from a backport — and a link of ours over it would swap what a person
+    # chose for what a package renamed. A link an earlier run of this script
+    # made answers here too, so running again writes nothing.
+    if have "$name"; then
+      continue
+    fi
+
+    ln -sf "$target" "$HOME/.local/bin/$name"
+    printf 'Linked %s to %s.\n' "$name" "$target"
+  done
+}
+
 # PATH for the shells this script does not run in.
 #
 # Every export here lasts as long as this run. bun's installer and Claude Code's
@@ -731,6 +764,21 @@ else
       FAILED_GAPS="${FAILED_GAPS}  ${command}"$'\n'
     fi
   done <<<"$commands"
+fi
+
+# The report is read a second time rather than reused. The one above was taken
+# before this step installed anything, and a link needs the path the install has
+# just put on disk.
+#
+# A link is convenience, the same as the gaps above it, so nothing here ends the
+# run: a report that came back empty is skipped, and a reader that refused one
+# says so and the run carries on to the project.
+report="$(prep doctor --json || true)"
+
+if [ -n "$report" ]; then
+  if ! printf '%s' "$report" | bun run "$PREP_DIR/scripts/links.ts" | link_renamed; then
+    printf 'Renamed executables could not be linked. Carrying on.\n' >&2
+  fi
 fi
 
 # ---------------------------------------------------------------------------

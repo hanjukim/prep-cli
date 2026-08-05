@@ -440,6 +440,18 @@ themselves is named by its full path — `$GH_BIN auth login`, not `gh auth logi
 The login below is the one place that matters, since it is the only command the
 script hands back mid-run.
 
+**An executable a package renamed is linked back to the name it is called by.**
+Debian family installs `fd-find` as `fdfind` and `bat` as `batcat`, and the
+registry records the second name, so doctor looks it up, finds it, and reports
+the tool installed. It is right about the machine and useless to everything that
+calls the tool, because every agent, alias and README line reaches for `fd`. So
+after the gaps are installed the script reads the report again — the paths only
+exist once the install has run — and links each renamed executable into
+`~/.local/bin` under its own name, the same directory the tarballs land in. The
+pairing comes out of the registry's two names rather than a list of its own, and
+a name that already answers is left alone, so a real `fd` somebody built or a
+link an earlier run made is never written over (docs/adr/0023).
+
 **A tool this machine holds is one installed for this machine.** Every install
 is guarded by whether the binary is already there, and on WSL that question has
 a wrong answer available: Windows drives are mounted under `/mnt`, their
