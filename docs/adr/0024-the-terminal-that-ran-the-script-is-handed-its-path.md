@@ -155,8 +155,11 @@ writes was reproduced from its published installer rather than observed on the
 machine that failed. A run on WSL with Ubuntu, stopping at step 9 and carrying
 on from that terminal, is the acceptance test.
 
-**fish was written from its documentation, not run.** No fish is installed on
-the machine this was written on, so the test that reads `config.fish` back with
-fish stands aside there; zsh and dash do run. The block and the pasted line are
-both plain fish — `if not contains`, `set -gx PATH` — but nothing has executed
-them. Installing fish on a machine with one is the check.
+**fish was run, in a container rather than on a machine that has it.** No fish
+is installed where this was written, so the test reading `config.fish` back with
+fish stands aside there and zsh and dash carry the suite. The block and the
+pasted line were both executed against fish 3.7.1 by hand: sourcing the rc put
+both directories on PATH, the pasted line did the same, and sourcing the rc
+twice left the directory on once. What that does not cover is a fish shell
+started as a login shell on a real machine, which reads `config.fish` through
+its own startup rather than through `source`.
