@@ -31,7 +31,7 @@ Handoff (3)
 Next (2)
   claude '/setup-matt-pocock-skills'  writes the guidance prep does not
     or codex '$setup-matt-pocock-skills'
-  prep doctor                         checks this machine for the standard tools
+  prep doctor                         reports what this machine still owes you
 "
 `;
 
@@ -64,9 +64,10 @@ Handoff (3)
 
 3 still owed.
 
-Next (1)
+Next (2)
   claude '/setup-matt-pocock-skills'  writes the guidance prep does not
     or codex '$setup-matt-pocock-skills'
+  prep doctor                         reports what this machine still owes you
 "
 `;
 
@@ -85,9 +86,10 @@ Handoff (3)
 
 3 still owed.
 
-Next (1)
+Next (2)
   claude '/setup-matt-pocock-skills'  writes the guidance prep does not
     or codex '$setup-matt-pocock-skills'
+  prep doctor                         reports what this machine still owes you
 "
 `;
 
@@ -118,7 +120,7 @@ Handoff (3)
 Next (2)
   claude '/setup-matt-pocock-skills'  writes the guidance prep does not
     or codex '$setup-matt-pocock-skills'
-  prep doctor                         checks this machine for the standard tools
+  prep doctor                         reports what this machine still owes you
 "
 `;
 
@@ -151,10 +153,11 @@ Handoff (3)
 
 3 still owed.
 
-Next (2)
+Next (3)
   prep setup /project                 in a terminal — see the merge and answer it
   claude '/setup-matt-pocock-skills'  writes the guidance prep does not
     or codex '$setup-matt-pocock-skills'
+  prep doctor                         reports what this machine still owes you
 "
 `;
 
@@ -190,10 +193,11 @@ Handoff (3)
 
 3 still owed.
 
-Next (2)
+Next (3)
   prep setup /project                 in a terminal — see the merge and answer it
   claude '/setup-matt-pocock-skills'  writes the guidance prep does not
     or codex '$setup-matt-pocock-skills'
+  prep doctor                         reports what this machine still owes you
 "
 `;
 
@@ -229,7 +233,7 @@ Handoff (3)
 Next (2)
   claude '/setup-matt-pocock-skills'  writes the guidance prep does not
     or codex '$setup-matt-pocock-skills'
-  prep doctor                         checks this machine for the standard tools
+  prep doctor                         reports what this machine still owes you
 "
 `;
 
@@ -248,9 +252,10 @@ Handoff (3)
 
 3 still owed.
 
-Next (1)
+Next (2)
   claude '/setup-matt-pocock-skills'  writes the guidance prep does not
     or codex '$setup-matt-pocock-skills'
+  prep doctor                         reports what this machine still owes you
 "
 `;
 
@@ -291,7 +296,7 @@ Handoff (3)
 Nothing owed. The harness side is already set up.
 
 Next (1)
-  prep doctor  checks this machine for the standard tools
+  prep doctor  reports what this machine still owes you
 "
 `;
 
@@ -325,7 +330,7 @@ Handoff (3)
 Next (2)
   claude '/setup-matt-pocock-skills'  writes the guidance prep does not
     or codex '$setup-matt-pocock-skills'
-  prep doctor                         checks this machine for the standard tools
+  prep doctor                         reports what this machine still owes you
 "
 `;
 
@@ -454,6 +459,11 @@ exports[`the JSON report skipped 1`] = `
       "id": "harness",
       "command": "claude '/setup-matt-pocock-skills'",
       "alternative": "codex '$setup-matt-pocock-skills'"
+    },
+    {
+      "id": "doctor",
+      "command": "prep doctor",
+      "alternative": null
     }
   ]
 }
@@ -492,7 +502,7 @@ Handoff (3)
 Next (2)
   claude '/setup-matt-pocock-skills'  writes the guidance prep does not
     or codex '$setup-matt-pocock-skills'
-  prep doctor                         checks this machine for the standard tools
+  prep doctor                         reports what this machine still owes you
 "
 `;
 
@@ -528,7 +538,7 @@ Handoff (3)
 Next (2)
   claude '/setup-matt-pocock-skills'  writes the guidance prep does not
     or codex '$setup-matt-pocock-skills'
-  prep doctor                         checks this machine for the standard tools
+  prep doctor                         reports what this machine still owes you
 "
 `;
 
@@ -564,7 +574,7 @@ Handoff (3)
 Next (2)
   claude '/setup-matt-pocock-skills'  writes the guidance prep does not
     or codex '$setup-matt-pocock-skills'
-  prep doctor                         checks this machine for the standard tools
+  prep doctor                         reports what this machine still owes you
 "
 `;
 
@@ -601,7 +611,7 @@ Handoff (3)
 Next (2)
   claude '/setup-matt-pocock-skills'  writes the guidance prep does not
     or codex '$setup-matt-pocock-skills'
-  prep doctor                         checks this machine for the standard tools
+  prep doctor                         reports what this machine still owes you
 "
 `;
 
@@ -638,7 +648,7 @@ Handoff (3)
 Next (2)
   claude '/setup-matt-pocock-skills'  writes the guidance prep does not
     or codex '$setup-matt-pocock-skills'
-  prep doctor                         checks this machine for the standard tools
+  prep doctor                         reports what this machine still owes you
 "
 `;
 
@@ -676,7 +686,7 @@ Handoff (3)
 Next (2)
   claude '/setup-matt-pocock-skills'  writes the guidance prep does not
     or codex '$setup-matt-pocock-skills'
-  prep doctor                         checks this machine for the standard tools
+  prep doctor                         reports what this machine still owes you
 "
 `;
 
@@ -716,7 +726,7 @@ Handoff (3)
 Next (2)
   claude '/setup-matt-pocock-skills'  writes the guidance prep does not
     or codex '$setup-matt-pocock-skills'
-  prep doctor                         checks this machine for the standard tools
+  prep doctor                         reports what this machine still owes you
 "
 `;
 
@@ -754,10 +764,11 @@ Handoff (3)
 
 3 still owed.
 
-Next (2)
+Next (3)
   prep setup /project                 in a terminal — see the merge and answer it
   claude '/setup-matt-pocock-skills'  writes the guidance prep does not
     or codex '$setup-matt-pocock-skills'
+  prep doctor                         reports what this machine still owes you
 "
 `;
 
@@ -811,7 +822,7 @@ Handoff (3)
 Next (2)
   claude '/setup-matt-pocock-skills'  writes the guidance prep does not
     or codex '$setup-matt-pocock-skills'
-  prep doctor                         checks this machine for the standard tools
+  prep doctor                         reports what this machine still owes you
 "
 `;
 
@@ -848,7 +859,7 @@ Handoff (3)
 Next (2)
   claude '/setup-matt-pocock-skills'  writes the guidance prep does not
     or codex '$setup-matt-pocock-skills'
-  prep doctor                         checks this machine for the standard tools
+  prep doctor                         reports what this machine still owes you
 "
 `;
 
@@ -886,7 +897,7 @@ Handoff (3)
 Next (2)
   claude '/setup-matt-pocock-skills'  writes the guidance prep does not
     or codex '$setup-matt-pocock-skills'
-  prep doctor                         checks this machine for the standard tools
+  prep doctor                         reports what this machine still owes you
 "
 `;
 
@@ -923,7 +934,7 @@ Handoff (3)
 
 Next (2)
   claude '/setup-matt-pocock-skills'  writes the guidance prep does not
-  prep doctor                         checks this machine for the standard tools
+  prep doctor                         reports what this machine still owes you
 "
 `;
 

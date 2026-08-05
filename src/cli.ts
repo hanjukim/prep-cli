@@ -203,7 +203,7 @@ export function approve(outcome: SetupOutcome, prompt: SetupPrompt, deps: RunDep
   // The suggestions are read off the outcome, so they are read again once the
   // answers are in: a merge that has just been approved is nothing to go back
   // and approve, and one that was refused is not either.
-  return { ...answered, next: nextSteps(answered, false) };
+  return { ...answered, next: nextSteps(answered) };
 }
 
 /**

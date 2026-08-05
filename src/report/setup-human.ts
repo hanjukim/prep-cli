@@ -328,7 +328,7 @@ const NEXT: Record<NextStepId, string> = {
   approve: "in a terminal — see the merge and answer it",
   harness: "writes the guidance prep does not",
   "install-harness": "no agent CLI here — install one first, then come back",
-  doctor: "checks this machine for the standard tools",
+  doctor: "reports what this machine still owes you",
 };
 
 /**

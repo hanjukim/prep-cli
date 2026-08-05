@@ -16,9 +16,10 @@ import type {
  * with it, in the same intervention level doctor holds to: a verified command,
  * shown, never run (docs/adr/0002). prep executes none of these.
  *
- * Each step is here because something in the outcome asked for it, so a run
- * with nothing left to do suggests nothing at all — a footer that always says
- * the same three things stops being read after the second run.
+ * Each project-side step is here because something in the outcome asked for
+ * it. The machine check is the exception: what a machine still owes a person
+ * does not depend on what this run did, so it is offered on every run that
+ * reaches the end.
  */
 
 /**
@@ -37,11 +38,6 @@ export function awaitsApproval(
   return (
     artifact.kind === "claude-settings" && artifact.status === "planned" && artifact.plan !== null
   );
-}
-
-/** Whether the run put anything on disk. */
-function wrote(artifact: Artifact): boolean {
-  return artifact.status === "applied" || artifact.status === "merged";
 }
 
 function owed(handoff: readonly HandoffResult[]): boolean {
@@ -91,12 +87,14 @@ function harnessStep(present: readonly HarnessPresence[]): NextStep {
  * Approval first: it is the only one that finishes work this run started and
  * left unfinished. The harness comes next, since it is what the project is
  * missing. The machine check comes last — it is a different scope, and it is
- * offered only to somebody who just set a project up.
+ * on every run: whether this run wrote a file says nothing about whether the
+ * machine's logins and identity are settled, and a dry run is exactly the run
+ * somebody uses to look before touching anything.
  *
  * Everything it needs is on the outcome, so the whole footer is decided without
  * touching the machine — the run read it once already.
  */
-export function nextSteps(outcome: SetupOutcome, dryRun: boolean): NextStep[] {
+export function nextSteps(outcome: SetupOutcome): NextStep[] {
   const steps: NextStep[] = [];
 
   // A plan nobody approved is not an observation to sit on. It is the same run,
@@ -107,15 +105,11 @@ export function nextSteps(outcome: SetupOutcome, dryRun: boolean): NextStep[] {
 
   if (owed(outcome.handoff)) steps.push(harnessStep(outcome.harnesses));
 
-  // Only for a run that actually settled the project. A dry run settled
-  // nothing, and pointing at the machine before the project is written puts the
-  // two scopes in the wrong order.
-  //
   // A run already sent to doctor for a harness is not sent there twice. The
   // second line would carry a different reason for the same command, and a
-  // footer that repeats itself is the thing this block exists to avoid.
+  // footer that repeats itself stops being read.
   const sent = steps.some((step) => step.command === DOCTOR);
-  if (!dryRun && !sent && outcome.artifacts.some(wrote)) {
+  if (!sent) {
     steps.push({ id: "doctor", command: DOCTOR, alternative: null });
   }
 
