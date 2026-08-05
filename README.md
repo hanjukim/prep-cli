@@ -33,7 +33,9 @@ Nothing goes after that line. The script opens the chain, closes what
 `prep doctor --json` reports, and then asks for the repository you came to work
 in — the one thing it cannot work out for itself. It clones what you name and
 runs `prep setup` in it. Press Enter instead and the run stops at a machine that
-is ready, and tells you how to come back for the project.
+is ready, and names the two commands — `git clone` and `prep setup` — that
+finish the job whenever you have the repository. Neither asks you back through
+this line.
 
 Naming a repository on GitHub is what brings the last two links in: a GitHub
 login, and the git name and email that login can answer for. The script stops in

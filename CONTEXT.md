@@ -322,10 +322,9 @@ the one question in the script whose refusal is an ending rather than a stop —
 Enter closes the run the way a run with nothing to clone already closed. Two
 runs are never asked at all: one that set `PREPARED_REPO` in the environment
 has answered ahead of the question (docs/adr/0015), and one with no terminal
-has nobody to ask, so its closing message names the variable rather than the
-question. A run that clones ends by printing the two commands that finish the
-job, `cd` into the project and `claude`, because a script cannot move the shell
-that called it. On macOS
+has nobody to ask. Both take the machine-only ending, and it is the same ending
+either way, because the commands it names need no terminal to have been there.
+On macOS
 the brew installer pulls in the Command Line Tools, so git arrives with it; on
 Linux apt is already the system, so it starts with `sudo apt install git`. The
 script carries no tool list of its own — **prep decides and the script
@@ -353,6 +352,18 @@ Codex is not in the chain — doctor names it as a gap and a person
 installs it. So the harness install command lives in two places: the script
 holds the one that opens the chain, the registry holds the advice the report
 prints.
+
+**The ending names one next action, and everything else reads as reference.** A
+finished run has four things to report — where the project is, gaps that would
+not install, two logins, and a command that reads the machine — and exactly one
+of them is the thing to do next: `cd` into the project and `claude` where one
+was cloned, `git clone` and `prep setup` where none was. That one is printed
+alone and indented, above a heading that turns everything after it into
+reference (docs/adr/0023). A script can neither move the shell that called it
+nor log in for anybody, so every command in the ending is printed rather than
+run. The machine-only ending names no `curl … | bash`: by the time it is read
+prep is installed, and sending somebody back through the whole script to answer
+one question spends a download to save two ordinary commands.
 
 **A login is not a link, and the script stops in front of one.** Carrying a
 dependency and performing an authentication are different things: software can
@@ -382,12 +393,17 @@ closing message names the same two commands rather than asking — the machine-o
 ending is where that run reads what is left for it (docs/adr/0021). The
 second thing is the GitHub login above. The third is the Claude Code login: the
 first `claude` run authenticates through a browser, which the script cannot do
-for anybody. The script's closing message is where that is said, and it is said
-nowhere else: whoever ran the one-liner is looking at that terminal, not at a
-page they would have had to find first. It names the account the login needs —
-Claude Code carries a paid plan only — and it names Codex's own login, since
-doctor goes on to report Codex as a gap and installing it opens the same
-question again.
+for anybody. Whoever ran the one-liner is looking at that terminal, not at a
+page they would have had to find first, so the script says it wherever it hands
+work back to a person — the closing message, and the stop in front of the GitHub
+login — in one wording written once (docs/adr/0023). The stop is what made two
+places necessary: it ends the run, so a message living in the closing block
+alone reached nobody who named a private repository on a fresh machine. Both are
+browser logins no script can perform, and handing them over together is what
+lets a person do both in one sitting. The closing message names the account the
+login needs — Claude Code carries a paid plan only — and it names Codex's own
+login, since doctor goes on to report Codex as a gap and installing it opens the
+same question again.
 
 **An account that cannot see a repository is not a broken machine.** Before the
 project clone the script asks `gh repo view`, an authenticated question, and a

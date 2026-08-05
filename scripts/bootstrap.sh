@@ -55,10 +55,6 @@ set -Eeuo pipefail
 PREP_REPO="${PREP_REPO:-https://github.com/hanjukim/prep-cli.git}"
 PREP_DIR="${PREP_DIR:-$HOME/.prep-cli}"
 
-# Where this script is served from. It is quoted back to the person whenever
-# they have to run it again, so the line they are given is the line that works.
-SCRIPT_URL="${SCRIPT_URL:-https://raw.githubusercontent.com/hanjukim/prep-cli/main/scripts/bootstrap.sh}"
-
 # The repository a new person starts working in. Cloned in step 9 and handed to
 # `prep setup` in step 10. Step 9 is where it is asked for, so the entry point
 # stays one line a person can be handed (docs/adr/0009).
@@ -336,6 +332,22 @@ Everything installed so far stays installed, and the script skips it."
   fi
 }
 
+# The Claude Code login, in the one wording every place that hands it over uses.
+#
+# The first `claude` run authenticates through a browser, and no script can do
+# that for anybody. Two places hand work back to a person — the stop below and
+# the closing message — and each of them is the last thing somebody reads on its
+# own path, so each says this (docs/adr/0023). It used to be said in the closing
+# message alone, which the stop below never reaches.
+claude_login_note() {
+  cat <<'MESSAGE'
+Logging in to Claude Code is a browser step, and the first `claude` run is what
+opens it. Claude Code needs a paid account: Pro, Max, Team, Enterprise or
+Console. The free Claude.ai plan does not carry it, and the login turns you away
+on one.
+MESSAGE
+}
+
 # The one stop this script makes for a person mid-run. A private repository
 # answers an unauthenticated request with 404 rather than a refusal, so a clone
 # without a login fails while describing the wrong problem, and no login is what
@@ -373,7 +385,12 @@ it by name.
 It prints a one-time code. If no browser opens, open https://github.com/login/device
 in any browser you can reach and enter the code there.
 
-Everything installed so far stays installed, and the second run skips it."
+Everything installed so far stays installed, and the second run skips it.
+
+One more browser login is waiting behind this one, and doing both now saves a
+second trip:
+
+$(claude_login_note)"
   fi
 
   # The login stores a token; this is what teaches git to send it, so a plain
@@ -817,73 +834,81 @@ fi
 # What is left
 # ---------------------------------------------------------------------------
 
-printf '\n==> Done\n'
-
-# A script cannot move the shell that called it, so the lines that finish the
-# job are printed rather than run. They are given in full, ready to paste.
-if [ "$PROJECT_READY" -eq 1 ]; then
-  printf 'Your project is at %s\n' "$PROJECT_DIR"
-  printf '\nStart working — open a new terminal, so it carries the tools this\n'
-  printf 'script installed, and run these two lines:\n'
-  printf '  cd %s\n' "$PROJECT_DIR"
-  printf '  claude\n'
-else
-  # The machine is finished and the project is the only thing outstanding, so
-  # the line that comes back for it is the one worth printing. Everything
-  # already installed is skipped on that second run.
-  printf 'This machine is ready. No project was named, so nothing was cloned\n'
-  printf 'and nothing was set up.\n'
-
-  # The identity sits behind the GitHub login, and both belong to the project
-  # branch this run did not take (docs/adr/0021). So it is named here rather
-  # than asked for — this is where a run that stops at the machine reads what is
-  # left for it, the same as the Claude Code login below. A second run that
-  # names a project logs in first and offers both answers instead.
-  if [ -z "$(git config --get user.name 2>/dev/null || true)" ] ||
-    [ -z "$(git config --get user.email 2>/dev/null || true)" ]; then
-    printf '\ngit has no name and email to commit under yet, and every commit\n'
-    printf 'needs both. Set them yourself:\n'
-    printf '  git config --global user.name "Your Name"\n'
-    printf '  git config --global user.email "you@example.com"\n'
-    printf 'Or leave them — the run that names a project asks GitHub and offers\n'
-    printf 'you the answers.\n'
-  fi
-
-  if have_tty; then
-    printf '\nWhen you have the repository you are working in, run this again and\n'
-    printf 'answer the last step — everything above it is skipped:\n'
-    printf '  curl -fsSL %s | bash\n' "$SCRIPT_URL"
-  else
-    # There was no terminal to ask on, and a second run in the same place would
-    # have none either. The environment is how a run like that names a project,
-    # so it is the line worth printing here — the question is not.
-    printf '\nThere was no terminal here, so nobody could be asked which repository\n'
-    printf 'this is for. Name it in the environment and run this again:\n'
-    printf '  curl -fsSL %s | PREPARED_REPO=<git url> bash\n' "$SCRIPT_URL"
-  fi
-fi
-
-if [ -n "$FAILED_GAPS" ]; then
-  printf '\nThese would not install. Run them yourself when you have a moment:\n'
-  printf '%s' "$FAILED_GAPS"
-fi
-
-# The one step a script cannot take for anybody (docs/adr/0013 decision 5).
+# What a finished run says, and in what order (docs/adr/0023).
 #
-# It is said here and nowhere else. Somebody who ran the one-liner is looking at
-# this terminal, not at a page they would have had to find first, and the login
-# is what stands between them and a working session.
-cat <<'MESSAGE'
+# **One next action, and everything else as reference.** A run reports several
+# things — where the project is, gaps that would not install, two logins, a
+# command that reads the machine — and whichever of them is the next thing to do
+# is one. So that one is printed alone, indented, above a heading that turns
+# everything after it into reference. A person who reads the first block and
+# stops has still read the thing to do.
+#
+# A script cannot move the shell that called it, nor log in for anybody, so
+# every command here is printed rather than run.
+closing_message() {
+  printf '\n==> Done\n'
 
-One thing is left for you: logging in to Claude Code. The first `claude` run
-opens a browser and asks for it. After that you are set.
+  if [ "$PROJECT_READY" -eq 1 ]; then
+    printf '\nYour project is at %s\n' "$PROJECT_DIR"
+    printf '\n  Next: open a new terminal, so it carries the tools this script\n'
+    printf '  installed, and run these two lines.\n\n'
+    printf '      cd %s\n' "$PROJECT_DIR"
+    printf '      claude\n'
+  else
+    # The machine is finished and the project is the only thing outstanding. By
+    # now prep is installed, so the two commands that finish the job are
+    # ordinary ones — no second download of this script to answer one question.
+    printf '\nThis machine is ready. No project was named, so nothing was cloned\n'
+    printf 'and nothing was set up.\n'
+    printf '\n  Next: clone the repository you are working in and set it up. Open\n'
+    printf '  a new terminal, so it carries the tools this script installed.\n\n'
+    printf '      git clone <git url> ~/my-project\n'
+    printf '      prep setup ~/my-project\n'
+  fi
 
-Claude Code needs a paid account: Pro, Max, Team, Enterprise or Console. The
-free Claude.ai plan does not carry it, and the login turns you away on one.
+  printf '\n==> For reference\n'
+
+  # This run's own leftovers come first, since they are the only lines here that
+  # are about what just happened rather than about what always holds.
+  if [ -n "$FAILED_GAPS" ]; then
+    printf '\nThese would not install:\n'
+    printf '%s' "$FAILED_GAPS"
+  fi
+
+  if [ "$PROJECT_READY" -eq 0 ]; then
+    # The clone above is the one command here that can fail for a reason nothing
+    # on this machine explains: a private repository answers an unauthenticated
+    # request with 404 rather than a refusal. This run took the branch that never
+    # logs in (docs/adr/0021), so the login belongs beside the command it serves.
+    printf '\nA private repository needs a GitHub login before that clone. Without\n'
+    printf 'one it answers with 404 rather than a refusal, so the clone fails while\n'
+    printf 'describing the wrong problem:\n'
+    printf '  gh auth login --git-protocol https --web\n'
+
+    # The identity sits behind the GitHub login, and both belong to the project
+    # branch this run did not take (docs/adr/0021). So it is named here rather
+    # than asked for. A second run that names a project logs in first and offers
+    # both answers instead.
+    if [ -z "$(git config --get user.name 2>/dev/null || true)" ] ||
+      [ -z "$(git config --get user.email 2>/dev/null || true)" ]; then
+      printf '\nEvery commit carries a name and an email, and git has neither yet:\n'
+      printf '  git config --global user.name "Your Name"\n'
+      printf '  git config --global user.email "you@example.com"\n'
+      printf 'A run that names a project asks GitHub and offers you both answers.\n'
+    fi
+  fi
+
+  printf '\n'
+  claude_login_note
+
+  cat <<'MESSAGE'
 
 Codex is not part of this script. Install it and it asks for a login of its
 own: a ChatGPT Plus, Pro, Business, Edu or Enterprise account, or an OpenAI
 API key.
 
-To see what your machine is still missing at any time, run: prep doctor
+prep doctor says what this machine is still missing, at any time.
 MESSAGE
+}
+
+closing_message
