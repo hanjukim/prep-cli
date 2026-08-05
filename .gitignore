@@ -1,0 +1,20 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+.DS_Store
+*.log
+
+# secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+
+# local, per-machine agent config
+.claude/settings.local.json
+.claude/worktrees/

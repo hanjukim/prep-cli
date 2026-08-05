@@ -1,0 +1,124 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`human report snapshots macOS · with gaps 1`] = `
+"prep doctor · darwin
+
+Prerequisites
+  ✓ homebrew     /opt/homebrew/bin/brew
+
+Installed (7)
+  ✓ git  ripgrep  bat  fzf  jq  make  claude-code
+
+Gaps (5)
+  ✗ fd           fast file search  brew install fd
+  ✗ zoxide       directory jump    brew install zoxide
+  ✗ gh           GitHub CLI        brew install gh
+  ✗ eza          ls replacement    brew install eza
+  ✗ codex        Codex agent CLI   brew install --cask codex
+
+5 gaps. Run the commands above yourself.
+"
+`;
+
+exports[`human report snapshots macOS · no gaps 1`] = `
+"prep doctor · darwin
+
+Prerequisites
+  ✓ homebrew     /opt/homebrew/bin/brew
+
+Installed (12)
+  ✓ git  ripgrep  fd  zoxide  gh  bat  eza  fzf  jq  make  claude-code  codex
+
+No gaps.
+"
+`;
+
+exports[`human report snapshots macOS · prerequisite missing 1`] = `
+"prep doctor · darwin
+
+⚠ homebrew is missing. Install commands below are hidden — install this first.
+
+Prerequisites
+  ✗ homebrew     Install it yourself with the official install script  https://brew.sh
+
+Installed (7)
+  ✓ git  ripgrep  bat  fzf  jq  make  claude-code
+
+Gaps (5)
+  ✗ fd           fast file search
+  ✗ zoxide       directory jump
+  ✗ gh           GitHub CLI
+  ✗ eza          ls replacement
+  ✗ codex        Codex agent CLI
+
+5 gaps. Install homebrew first.
+"
+`;
+
+exports[`human report snapshots Linux · with gaps 1`] = `
+"prep doctor · linux
+
+Prerequisites
+  ✓ apt          /usr/bin/apt
+
+Installed (7)
+  ✓ git  ripgrep  bat  fzf  jq  make  claude-code
+
+Gaps (5)
+  ✗ fd           fast file search  sudo apt install -y fd-find
+  ✗ zoxide       directory jump    sudo apt install -y zoxide
+  ✗ gh           GitHub CLI        sudo apt install -y gh
+  ✗ eza          ls replacement    sudo apt install -y eza
+  ✗ codex        Codex agent CLI   Install it yourself — no package manager carries it  https://github.com/openai/codex
+
+5 gaps. Run the commands above yourself.
+"
+`;
+
+exports[`human report snapshots Linux · no gaps 1`] = `
+"prep doctor · linux
+
+Prerequisites
+  ✓ apt          /usr/bin/apt
+
+Installed (12)
+  ✓ git  ripgrep  fd  zoxide  gh  bat  eza  fzf  jq  make  claude-code  codex
+
+No gaps.
+"
+`;
+
+exports[`human report snapshots Linux · prerequisite missing 1`] = `
+"prep doctor · linux
+
+⚠ apt is missing. Install commands below are hidden — install this first.
+
+Prerequisites
+  ✗ apt          No apt means this is not Debian family. Check your distro's package manager yourself
+
+Installed (7)
+  ✓ git  ripgrep  bat  fzf  jq  make  claude-code
+
+Gaps (5)
+  ✗ fd           fast file search
+  ✗ zoxide       directory jump
+  ✗ gh           GitHub CLI
+  ✗ eza          ls replacement
+  ✗ codex        Codex agent CLI   Install it yourself — no package manager carries it  https://github.com/openai/codex
+
+5 gaps. Install apt first.
+"
+`;
+
+exports[`human report snapshots with a not-applicable entry present 1`] = `
+"prep doctor · darwin
+
+Prerequisites
+  ✓ homebrew  /opt/homebrew/bin/brew
+
+Not applicable (1)
+  – apt-only  not checked on darwin
+
+No gaps.
+"
+`;

@@ -1,0 +1,94 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`JSON report snapshots macOS · installed, gaps, and not applicable mixed 1`] = `
+"{
+  "platform": "darwin",
+  "results": [
+    {
+      "id": "homebrew",
+      "status": "installed",
+      "binary": "brew",
+      "path": "/opt/homebrew/bin/brew",
+      "guidance": {
+        "kind": "manual",
+        "note": "Follow the official install script",
+        "url": "https://brew.sh"
+      }
+    },
+    {
+      "id": "apt",
+      "status": "unsupported",
+      "binary": null,
+      "path": null,
+      "guidance": null
+    },
+    {
+      "id": "git",
+      "status": "installed",
+      "binary": "git",
+      "path": "/usr/bin/git",
+      "guidance": {
+        "kind": "command",
+        "command": "brew install git"
+      }
+    },
+    {
+      "id": "fd",
+      "status": "missing",
+      "binary": "fd",
+      "path": null,
+      "guidance": {
+        "kind": "command",
+        "command": "brew install fd"
+      }
+    }
+  ]
+}
+"
+`;
+
+exports[`JSON report snapshots Linux · including the binary name quirk 1`] = `
+"{
+  "platform": "linux",
+  "results": [
+    {
+      "id": "homebrew",
+      "status": "unsupported",
+      "binary": null,
+      "path": null,
+      "guidance": null
+    },
+    {
+      "id": "apt",
+      "status": "installed",
+      "binary": "apt",
+      "path": "/usr/bin/apt",
+      "guidance": {
+        "kind": "manual",
+        "note": "Check your distro's package manager yourself"
+      }
+    },
+    {
+      "id": "git",
+      "status": "missing",
+      "binary": "git",
+      "path": null,
+      "guidance": {
+        "kind": "command",
+        "command": "sudo apt install git"
+      }
+    },
+    {
+      "id": "fd",
+      "status": "installed",
+      "binary": "fdfind",
+      "path": "/usr/bin/fdfind",
+      "guidance": {
+        "kind": "command",
+        "command": "sudo apt install fd-find"
+      }
+    }
+  ]
+}
+"
+`;

@@ -1,0 +1,51 @@
+name: CI
+
+# Every branch, so the trigger survives a rename of the default branch.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# A newer commit on the same ref makes the older run irrelevant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - run: bun test
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - run: bunx tsc --noEmit
+
+  # The bootstrap script is the one file nobody type checks by running it: it
+  # installs a machine, so a broken line is found by the person it breaks for.
+  #
+  # bash reads it and reports what it cannot parse, which is every syntax error
+  # and nothing else. shellcheck would go further — an unquoted expansion beside
+  # this script's `rm -rf` is the mistake with the worst reach — but it is not on
+  # every runner image, and a job that installs its own tool costs an apt update
+  # on every run. This checks what it can check with the shell that is already
+  # there, and the rest is read by a person.
+  shell:
+    name: Shell
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: bash -n scripts/bootstrap.sh

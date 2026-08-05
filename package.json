@@ -1,0 +1,20 @@
+{
+  "name": "prep-cli",
+  "version": "0.1.0-beta.0",
+  "description": "Security-first, deny-by-default project and machine setup CLI for coding agents.",
+  "license": "MIT",
+  "author": "Hanju Kim",
+  "type": "module",
+  "bin": {
+    "prep": "./src/cli.ts"
+  },
+  "scripts": {
+    "prep": "bun run src/cli.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.2"
+  }
+}

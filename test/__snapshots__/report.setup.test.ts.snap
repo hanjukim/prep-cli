@@ -1,0 +1,964 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`the human report applied 1`] = `
+"prep setup · /project
+
+Detected (1)
+  ✓ node  package.json
+
+Wrote /project/.claude/settings.json — edit it yourself for anything the preset does not cover.
+
+Starting mode
+  acceptEdits
+
+Denying (1)
+  Read(./.env)
+
+Allowing (2)
+  Bash(npm:*)
+  Bash(node:*)
+
+Asking (1)
+  WebFetch
+
+Handoff (3)
+  ✗ language       no AGENTS.md and no CLAUDE.md
+  ✗ issue tracker  no docs/agents/issue-tracker.md
+  ✗ domain docs    no docs/agents/domain.md
+
+3 still owed.
+
+Next (2)
+  claude '/setup-matt-pocock-skills'  writes the guidance prep does not
+    or codex '$setup-matt-pocock-skills'
+  prep doctor                         checks this machine for the standard tools
+"
+`;
+
+exports[`the human report planned 1`] = `
+"prep setup · /project
+
+Detected (2)
+  ✓ node    package.json
+  ✓ python  pyproject.toml
+
+Dry run. Nothing was written to /project/.claude/settings.json. It would hold:
+
+Starting mode
+  acceptEdits
+
+Denying (1)
+  Read(./.env)
+
+Allowing (2)
+  Bash(npm:*)
+  Bash(uv:*)
+
+Asking (1)
+  WebFetch
+
+Handoff (3)
+  ✗ language       no AGENTS.md and no CLAUDE.md
+  ✗ issue tracker  no docs/agents/issue-tracker.md
+  ✗ domain docs    no docs/agents/domain.md
+
+3 still owed.
+
+Next (1)
+  claude '/setup-matt-pocock-skills'  writes the guidance prep does not
+    or codex '$setup-matt-pocock-skills'
+"
+`;
+
+exports[`the human report skipped 1`] = `
+"prep setup · /project
+
+Detected (1)
+  ✓ python  pyproject.toml
+
+/project/.claude/settings.json already covers this baseline — nothing to add.
+
+Handoff (3)
+  ✗ language       no AGENTS.md and no CLAUDE.md
+  ✗ issue tracker  no docs/agents/issue-tracker.md
+  ✗ domain docs    no docs/agents/domain.md
+
+3 still owed.
+
+Next (1)
+  claude '/setup-matt-pocock-skills'  writes the guidance prep does not
+    or codex '$setup-matt-pocock-skills'
+"
+`;
+
+exports[`the human report no marker 1`] = `
+"prep setup · /project
+
+Detected (0)
+  – no package.json, pyproject.toml
+
+Wrote /project/.claude/settings.json — edit it yourself for anything the preset does not cover. Only the type-independent rules went in.
+
+Starting mode
+  acceptEdits
+
+Denying (1)
+  Read(./.env)
+
+Asking (1)
+  WebFetch
+
+Handoff (3)
+  ✗ language       no AGENTS.md and no CLAUDE.md
+  ✗ issue tracker  no docs/agents/issue-tracker.md
+  ✗ domain docs    no docs/agents/domain.md
+
+3 still owed.
+
+Next (2)
+  claude '/setup-matt-pocock-skills'  writes the guidance prep does not
+    or codex '$setup-matt-pocock-skills'
+  prep doctor                         checks this machine for the standard tools
+"
+`;
+
+exports[`the merge diff a merge that only adds rules 1`] = `
+"prep setup · /project
+
+Detected (1)
+  ✓ node  package.json
+
+/project/.claude/settings.json already exists. Merging adds 4 rules. Nothing has been written yet.
+
+Starting mode
+    acceptEdits
+
+Denying (1 · +1)
+  + Read(./.env)
+
+Allowing (3 · +2)
+    Bash(terraform:*)
+  + Edit(./**)
+  + Bash(npm:*)
+
+Asking (1 · +1)
+  + WebFetch
+
+Handoff (3)
+  ✗ language       no AGENTS.md and no CLAUDE.md
+  ✗ issue tracker  no docs/agents/issue-tracker.md
+  ✗ domain docs    no docs/agents/domain.md
+
+3 still owed.
+
+Next (2)
+  prep setup /project                 in a terminal — see the merge and answer it
+  claude '/setup-matt-pocock-skills'  writes the guidance prep does not
+    or codex '$setup-matt-pocock-skills'
+"
+`;
+
+exports[`the merge diff a merge with a value to decide 1`] = `
+"prep setup · /project
+
+Detected (1)
+  ✓ node  package.json
+
+/project/.claude/settings.json already exists. Merging adds 4 rules and leaves 1 value to decide. Nothing has been written yet.
+
+Starting mode
+    plan
+
+Denying (1 · +1)
+  + Read(./.env)
+
+Allowing (3 · +2)
+    Bash(terraform:*)
+  + Edit(./**)
+  + Bash(npm:*)
+
+Asking (1 · +1)
+  + WebFetch
+
+To decide (1)
+  ! defaultMode  yours: plan  preset: acceptEdits
+
+Handoff (3)
+  ✗ language       no AGENTS.md and no CLAUDE.md
+  ✗ issue tracker  no docs/agents/issue-tracker.md
+  ✗ domain docs    no docs/agents/domain.md
+
+3 still owed.
+
+Next (2)
+  prep setup /project                 in a terminal — see the merge and answer it
+  claude '/setup-matt-pocock-skills'  writes the guidance prep does not
+    or codex '$setup-matt-pocock-skills'
+"
+`;
+
+exports[`the merge diff merged 1`] = `
+"prep setup · /project
+
+Detected (1)
+  ✓ node  package.json
+
+Merged into /project/.claude/settings.json. Everything that was already there was kept.
+
+Starting mode
+    acceptEdits
+
+Denying (1 · +1)
+  + Read(./.env)
+
+Allowing (3 · +2)
+    Bash(terraform:*)
+  + Edit(./**)
+  + Bash(npm:*)
+
+Asking (1 · +1)
+  + WebFetch
+
+Handoff (3)
+  ✗ language       no AGENTS.md and no CLAUDE.md
+  ✗ issue tracker  no docs/agents/issue-tracker.md
+  ✗ domain docs    no docs/agents/domain.md
+
+3 still owed.
+
+Next (2)
+  claude '/setup-matt-pocock-skills'  writes the guidance prep does not
+    or codex '$setup-matt-pocock-skills'
+  prep doctor                         checks this machine for the standard tools
+"
+`;
+
+exports[`the merge diff declined 1`] = `
+"prep setup · /project
+
+Detected (1)
+  ✓ node  package.json
+
+Left /project/.claude/settings.json exactly as it was. Nothing was written.
+
+Handoff (3)
+  ✗ language       no AGENTS.md and no CLAUDE.md
+  ✗ issue tracker  no docs/agents/issue-tracker.md
+  ✗ domain docs    no docs/agents/domain.md
+
+3 still owed.
+
+Next (1)
+  claude '/setup-matt-pocock-skills'  writes the guidance prep does not
+    or codex '$setup-matt-pocock-skills'
+"
+`;
+
+exports[`the merge diff the summary before writing names the file and counts what lands 1`] = `
+"Will write to /project/.claude/settings.json
+  Starting mode  acceptEdits
+  Denying        1 rule
+  Allowing       3 rules
+  Asking         1 rule
+"
+`;
+
+exports[`what the harness still owes everything settled 1`] = `
+"prep setup · /project
+
+Detected (1)
+  ✓ node  package.json
+
+Wrote /project/.claude/settings.json — edit it yourself for anything the preset does not cover.
+
+Starting mode
+  acceptEdits
+
+Denying (1)
+  Read(./.env)
+
+Allowing (1)
+  Bash(npm:*)
+
+Asking (1)
+  WebFetch
+
+Handoff (3)
+  ✓ language       CLAUDE.md
+  ✓ issue tracker  docs/agents/issue-tracker.md
+  ✓ domain docs    docs/agents/domain.md
+
+Nothing owed. The harness side is already set up.
+
+Next (1)
+  prep doctor  checks this machine for the standard tools
+"
+`;
+
+exports[`what the harness still owes started and stopped halfway 1`] = `
+"prep setup · /project
+
+Detected (1)
+  ✓ node  package.json
+
+Wrote /project/.claude/settings.json — edit it yourself for anything the preset does not cover.
+
+Starting mode
+  acceptEdits
+
+Denying (1)
+  Read(./.env)
+
+Allowing (1)
+  Bash(npm:*)
+
+Asking (1)
+  WebFetch
+
+Handoff (3)
+  ✓ language       AGENTS.md
+  ✗ issue tracker  docs/agents/issue-tracker.md names no tracker
+  ✗ domain docs    no docs/agents/domain.md
+
+2 still owed.
+
+Next (2)
+  claude '/setup-matt-pocock-skills'  writes the guidance prep does not
+    or codex '$setup-matt-pocock-skills'
+  prep doctor                         checks this machine for the standard tools
+"
+`;
+
+exports[`the JSON report applied 1`] = `
+"{
+  "root": "/project",
+  "detected": [
+    "node"
+  ],
+  "artifacts": [
+    {
+      "kind": "claude-settings",
+      "path": "/project/.claude/settings.json",
+      "status": "applied",
+      "settings": {
+        "permissions": {
+          "defaultMode": "acceptEdits",
+          "deny": [
+            "Read(./.env)"
+          ],
+          "allow": [
+            "Bash(npm:*)",
+            "Bash(node:*)"
+          ],
+          "ask": [
+            "WebFetch"
+          ]
+        }
+      },
+      "merge": null
+    }
+  ],
+  "harnesses": [
+    {
+      "id": "claude-code",
+      "installed": true,
+      "covered": true
+    },
+    {
+      "id": "codex",
+      "installed": true,
+      "covered": true
+    }
+  ],
+  "plugins": [],
+  "handoff": [
+    {
+      "id": "language",
+      "status": "missing",
+      "path": null
+    },
+    {
+      "id": "issue-tracker",
+      "status": "missing",
+      "path": null
+    },
+    {
+      "id": "domain-docs",
+      "status": "missing",
+      "path": null
+    }
+  ],
+  "next": [
+    {
+      "id": "harness",
+      "command": "claude '/setup-matt-pocock-skills'",
+      "alternative": "codex '$setup-matt-pocock-skills'"
+    },
+    {
+      "id": "doctor",
+      "command": "prep doctor",
+      "alternative": null
+    }
+  ]
+}
+"
+`;
+
+exports[`the JSON report skipped 1`] = `
+"{
+  "root": "/project",
+  "detected": [
+    "python"
+  ],
+  "artifacts": [
+    {
+      "kind": "claude-settings",
+      "path": "/project/.claude/settings.json",
+      "status": "skipped",
+      "settings": null,
+      "merge": null
+    }
+  ],
+  "harnesses": [
+    {
+      "id": "claude-code",
+      "installed": true,
+      "covered": true
+    },
+    {
+      "id": "codex",
+      "installed": true,
+      "covered": true
+    }
+  ],
+  "plugins": [],
+  "handoff": [
+    {
+      "id": "language",
+      "status": "missing",
+      "path": null
+    },
+    {
+      "id": "issue-tracker",
+      "status": "missing",
+      "path": null
+    },
+    {
+      "id": "domain-docs",
+      "status": "missing",
+      "path": null
+    }
+  ],
+  "next": [
+    {
+      "id": "harness",
+      "command": "claude '/setup-matt-pocock-skills'",
+      "alternative": "codex '$setup-matt-pocock-skills'"
+    }
+  ]
+}
+"
+`;
+
+exports[`the guidance file written 1`] = `
+"prep setup · /project
+
+Detected (1)
+  ✓ node  package.json
+
+Wrote /project/.claude/settings.json — edit it yourself for anything the preset does not cover.
+
+Starting mode
+  acceptEdits
+
+Denying (1)
+  Read(./.env)
+
+Allowing (1)
+  Bash(npm:*)
+
+Asking (1)
+  WebFetch
+
+Wrote /project/AGENTS.md — the language rule, in the file the harness writes the rest into.
+
+Handoff (3)
+  ✗ language       AGENTS.md has no Language section
+  ✗ issue tracker  no docs/agents/issue-tracker.md
+  ✗ domain docs    no docs/agents/domain.md
+
+3 still owed.
+
+Next (2)
+  claude '/setup-matt-pocock-skills'  writes the guidance prep does not
+    or codex '$setup-matt-pocock-skills'
+  prep doctor                         checks this machine for the standard tools
+"
+`;
+
+exports[`the guidance file planned 1`] = `
+"prep setup · /project
+
+Detected (1)
+  ✓ node  package.json
+
+Wrote /project/.claude/settings.json — edit it yourself for anything the preset does not cover.
+
+Starting mode
+  acceptEdits
+
+Denying (1)
+  Read(./.env)
+
+Allowing (1)
+  Bash(npm:*)
+
+Asking (1)
+  WebFetch
+
+Dry run. Nothing was written to /project/AGENTS.md. It would be the language rule, in the file the harness writes the rest into.
+
+Handoff (3)
+  ✗ language       no AGENTS.md and no CLAUDE.md
+  ✗ issue tracker  no docs/agents/issue-tracker.md
+  ✗ domain docs    no docs/agents/domain.md
+
+3 still owed.
+
+Next (2)
+  claude '/setup-matt-pocock-skills'  writes the guidance prep does not
+    or codex '$setup-matt-pocock-skills'
+  prep doctor                         checks this machine for the standard tools
+"
+`;
+
+exports[`the guidance file already there 1`] = `
+"prep setup · /project
+
+Detected (1)
+  ✓ node  package.json
+
+Wrote /project/.claude/settings.json — edit it yourself for anything the preset does not cover.
+
+Starting mode
+  acceptEdits
+
+Denying (1)
+  Read(./.env)
+
+Allowing (1)
+  Bash(npm:*)
+
+Asking (1)
+  WebFetch
+
+/project/CLAUDE.md is already there — prep leaves a guidance file that exists alone.
+
+Handoff (3)
+  ✗ language       no AGENTS.md and no CLAUDE.md
+  ✗ issue tracker  no docs/agents/issue-tracker.md
+  ✗ domain docs    no docs/agents/domain.md
+
+3 still owed.
+
+Next (2)
+  claude '/setup-matt-pocock-skills'  writes the guidance prep does not
+    or codex '$setup-matt-pocock-skills'
+  prep doctor                         checks this machine for the standard tools
+"
+`;
+
+exports[`the plugins a project type calls for one to install 1`] = `
+"prep setup · /project
+
+Detected (1)
+  ✓ node  package.json
+
+Wrote /project/.claude/settings.json — edit it yourself for anything the preset does not cover.
+
+Starting mode
+  acceptEdits
+
+Denying (1)
+  Read(./.env)
+
+Allowing (1)
+  Bash(npm:*)
+
+Asking (1)
+  WebFetch
+
+Plugins (1)
+  ✗ typescript-lsp  not installed — claude plugin install typescript-lsp@claude-plugins-official
+
+Handoff (3)
+  ✗ language       no AGENTS.md and no CLAUDE.md
+  ✗ issue tracker  no docs/agents/issue-tracker.md
+  ✗ domain docs    no docs/agents/domain.md
+
+3 still owed.
+
+Next (2)
+  claude '/setup-matt-pocock-skills'  writes the guidance prep does not
+    or codex '$setup-matt-pocock-skills'
+  prep doctor                         checks this machine for the standard tools
+"
+`;
+
+exports[`the plugins a project type calls for one to turn on 1`] = `
+"prep setup · /project
+
+Detected (1)
+  ✓ node  package.json
+
+Wrote /project/.claude/settings.json — edit it yourself for anything the preset does not cover.
+
+Starting mode
+  acceptEdits
+
+Denying (1)
+  Read(./.env)
+
+Allowing (1)
+  Bash(npm:*)
+
+Asking (1)
+  WebFetch
+
+Plugins (1)
+  + typescript-lsp  installed on this machine — prep turns it on here
+
+Handoff (3)
+  ✗ language       no AGENTS.md and no CLAUDE.md
+  ✗ issue tracker  no docs/agents/issue-tracker.md
+  ✗ domain docs    no docs/agents/domain.md
+
+3 still owed.
+
+Next (2)
+  claude '/setup-matt-pocock-skills'  writes the guidance prep does not
+    or codex '$setup-matt-pocock-skills'
+  prep doctor                         checks this machine for the standard tools
+"
+`;
+
+exports[`the plugins a project type calls for a missing language server 1`] = `
+"prep setup · /project
+
+Detected (1)
+  ✓ node  package.json
+
+Wrote /project/.claude/settings.json — edit it yourself for anything the preset does not cover.
+
+Starting mode
+  acceptEdits
+
+Denying (1)
+  Read(./.env)
+
+Allowing (1)
+  Bash(npm:*)
+
+Asking (1)
+  WebFetch
+
+Plugins (1)
+  ! typescript-lsp  already in this project's settings
+                    no typescript-language-server on PATH — npm install -g typescript-language-server typescript
+
+Handoff (3)
+  ✗ language       no AGENTS.md and no CLAUDE.md
+  ✗ issue tracker  no docs/agents/issue-tracker.md
+  ✗ domain docs    no docs/agents/domain.md
+
+3 still owed.
+
+Next (2)
+  claude '/setup-matt-pocock-skills'  writes the guidance prep does not
+    or codex '$setup-matt-pocock-skills'
+  prep doctor                         checks this machine for the standard tools
+"
+`;
+
+exports[`turning an installed plugin on written into a fresh file 1`] = `
+"prep setup · /project
+
+Detected (1)
+  ✓ node  package.json
+
+Wrote /project/.claude/settings.json — edit it yourself for anything the preset does not cover.
+
+Starting mode
+  acceptEdits
+
+Denying (1)
+  Read(./.env)
+
+Allowing (1)
+  Bash(npm:*)
+
+Asking (1)
+  WebFetch
+
+Enabling (1)
+  typescript-lsp@claude-plugins-official
+
+Plugins (1)
+  + typescript-lsp  installed on this machine — prep turns it on here
+
+Handoff (3)
+  ✗ language       no AGENTS.md and no CLAUDE.md
+  ✗ issue tracker  no docs/agents/issue-tracker.md
+  ✗ domain docs    no docs/agents/domain.md
+
+3 still owed.
+
+Next (2)
+  claude '/setup-matt-pocock-skills'  writes the guidance prep does not
+    or codex '$setup-matt-pocock-skills'
+  prep doctor                         checks this machine for the standard tools
+"
+`;
+
+exports[`turning an installed plugin on added to a file that already lists another 1`] = `
+"prep setup · /project
+
+Detected (1)
+  ✓ node  package.json
+
+/project/.claude/settings.json already exists. Merging adds 3 rules and turns on 1 plugin. Nothing has been written yet.
+
+Starting mode
+    acceptEdits
+
+Denying (1 · +1)
+  + Read(./.env)
+
+Allowing (1 · +1)
+  + Bash(npm:*)
+
+Asking (1 · +1)
+  + WebFetch
+
+Enabling (2 · +1)
+    pyright-lsp@claude-plugins-official
+  + typescript-lsp@claude-plugins-official
+
+Plugins (1)
+  + typescript-lsp  installed on this machine — prep turns it on here
+
+Handoff (3)
+  ✗ language       no AGENTS.md and no CLAUDE.md
+  ✗ issue tracker  no docs/agents/issue-tracker.md
+  ✗ domain docs    no docs/agents/domain.md
+
+3 still owed.
+
+Next (2)
+  prep setup /project                 in a terminal — see the merge and answer it
+  claude '/setup-matt-pocock-skills'  writes the guidance prep does not
+    or codex '$setup-matt-pocock-skills'
+"
+`;
+
+exports[`turning an installed plugin on the summary before writing counts every plugin the file will hold, not only the new one 1`] = `
+"Will write to /project/.claude/settings.json
+  Starting mode  acceptEdits
+  Denying        1 rule
+  Allowing       1 rule
+  Asking         1 rule
+  Enabling       2 plugins
+"
+`;
+
+exports[`the Codex permission file written 1`] = `
+"prep setup · /project
+
+Detected (1)
+  ✓ node  package.json
+
+Wrote /project/.claude/settings.json — edit it yourself for anything the preset does not cover.
+
+Starting mode
+  acceptEdits
+
+Denying (1)
+  Read(./.env)
+
+Allowing (1)
+  Bash(npm:*)
+
+Asking (1)
+  WebFetch
+
+Wrote /project/.codex/config.toml — the same baseline, in the form Codex reads.
+
+Starting mode
+  :workspace, approval on-request
+
+Denying (3)
+  .env
+  **/*.pem
+  ~/.ssh
+
+Handoff (3)
+  ✗ language       no AGENTS.md and no CLAUDE.md
+  ✗ issue tracker  no docs/agents/issue-tracker.md
+  ✗ domain docs    no docs/agents/domain.md
+
+3 still owed.
+
+Next (2)
+  claude '/setup-matt-pocock-skills'  writes the guidance prep does not
+    or codex '$setup-matt-pocock-skills'
+  prep doctor                         checks this machine for the standard tools
+"
+`;
+
+exports[`the Codex permission file already there, with a sandbox mode in it 1`] = `
+"prep setup · /project
+
+Detected (1)
+  ✓ node  package.json
+
+Wrote /project/.claude/settings.json — edit it yourself for anything the preset does not cover.
+
+Starting mode
+  acceptEdits
+
+Denying (1)
+  Read(./.env)
+
+Allowing (1)
+  Bash(npm:*)
+
+Asking (1)
+  WebFetch
+
+/project/.codex/config.toml is already there — prep does not merge TOML, so it was left exactly as it was.
+  ! it sets sandbox_mode — Codex reads that instead of any permission profile, so nothing here is closed by prep.
+
+Handoff (3)
+  ✗ language       no AGENTS.md and no CLAUDE.md
+  ✗ issue tracker  no docs/agents/issue-tracker.md
+  ✗ domain docs    no docs/agents/domain.md
+
+3 still owed.
+
+Next (2)
+  claude '/setup-matt-pocock-skills'  writes the guidance prep does not
+    or codex '$setup-matt-pocock-skills'
+  prep doctor                         checks this machine for the standard tools
+"
+`;
+
+exports[`the file that points Claude Code at the guidance written 1`] = `
+"prep setup · /project
+
+Detected (1)
+  ✓ node  package.json
+
+Wrote /project/.claude/settings.json — edit it yourself for anything the preset does not cover.
+
+Starting mode
+  acceptEdits
+
+Denying (1)
+  Read(./.env)
+
+Allowing (1)
+  Bash(npm:*)
+
+Asking (1)
+  WebFetch
+
+Wrote /project/AGENTS.md — the language rule, in the file the harness writes the rest into.
+
+Wrote /project/CLAUDE.md — one import line, so Claude Code reads the guidance in AGENTS.md.
+
+Handoff (3)
+  ✗ language       no AGENTS.md and no CLAUDE.md
+  ✗ issue tracker  no docs/agents/issue-tracker.md
+  ✗ domain docs    no docs/agents/domain.md
+
+3 still owed.
+
+Next (2)
+  claude '/setup-matt-pocock-skills'  writes the guidance prep does not
+    or codex '$setup-matt-pocock-skills'
+  prep doctor                         checks this machine for the standard tools
+"
+`;
+
+exports[`which harness the run wrote for one harness missing 1`] = `
+"prep setup · /project
+
+Detected (1)
+  ✓ node  package.json
+
+Wrote /project/.claude/settings.json — edit it yourself for anything the preset does not cover.
+
+Starting mode
+  acceptEdits
+
+Denying (1)
+  Read(./.env)
+
+Allowing (1)
+  Bash(npm:*)
+
+Asking (1)
+  WebFetch
+
+Harnesses (2)
+  ✓ claude-code  installed — its files are written here
+  ✗ codex        not installed — its files are left out
+
+Handoff (3)
+  ✗ language       no AGENTS.md and no CLAUDE.md
+  ✗ issue tracker  no docs/agents/issue-tracker.md
+  ✗ domain docs    no docs/agents/domain.md
+
+3 still owed.
+
+Next (2)
+  claude '/setup-matt-pocock-skills'  writes the guidance prep does not
+  prep doctor                         checks this machine for the standard tools
+"
+`;
+
+exports[`which harness the run wrote for no harness at all 1`] = `
+"prep setup · /project
+
+Detected (1)
+  ✓ node  package.json
+
+Wrote /project/.claude/settings.json — edit it yourself for anything the preset does not cover.
+
+Starting mode
+  acceptEdits
+
+Denying (1)
+  Read(./.env)
+
+Allowing (1)
+  Bash(npm:*)
+
+Asking (1)
+  WebFetch
+
+Harnesses (2)
+  ✗ claude-code  not installed — written for anyway, so the project is not left without a baseline
+  ✗ codex        not installed — its files are left out
+
+Handoff (3)
+  ✗ language       no AGENTS.md and no CLAUDE.md
+  ✗ issue tracker  no docs/agents/issue-tracker.md
+  ✗ domain docs    no docs/agents/domain.md
+
+3 still owed.
+
+Next (1)
+  prep doctor  no agent CLI here — install one first, then come back
+"
+`;
