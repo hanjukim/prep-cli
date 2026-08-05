@@ -86,6 +86,43 @@ NODE_DIST="https://nodejs.org/dist/${NODE_VERSION}"
 GH_VERSION="2.97.0"
 GH_DIST="https://github.com/cli/cli/releases/download/v${GH_VERSION}"
 
+# Where bun installs, which is also where bun's `link` puts prep in step 7. It
+# is settled here rather than at step 3 because the messages this script hands
+# back name the directory, and one of them is printed by a run that stops before
+# step 3 ever runs.
+BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
+
+# Where the run leaves a file the terminal that started it can read, since that
+# is the one terminal no rc reaches (docs/adr/0024). ~/.local/share is where
+# this script already parks what it installs — the Node and gh trees — and it is
+# not $PREP_DIR, which is a git clone this would leave an untracked file in.
+PREP_SHARE="${PREP_SHARE:-$HOME/.local/share/prep}"
+
+# Emphasis, where there is a terminal to take it.
+#
+# This script prints one instruction a person has to act on — the file that
+# gives their terminal the tools — and it is printed among a screen of install
+# output they have just watched scroll by. Everything here exists to keep that
+# one thing from being scrolled past (docs/adr/0024).
+#
+# A run whose output is a file or a pipe gets none of it, because escape codes
+# in a log are noise rather than emphasis, and NO_COLOR is honoured because
+# somebody who set it has already said so. stderr counts as well as stdout: the
+# stop at step 9 goes there, and it is the message that matters most.
+BOLD=""
+REVERSE=""
+RESET=""
+if { [ -t 1 ] || [ -t 2 ]; } && [ -z "${NO_COLOR:-}" ]; then
+  BOLD="$(printf '\033[1m')"
+  REVERSE="$(printf '\033[7m')"
+  RESET="$(printf '\033[0m')"
+fi
+
+# The width of the rules the announcement is drawn between. Narrower than the
+# 80 columns the prose is wrapped to, so the block reads as a block rather than
+# as more of the same.
+RULE="────────────────────────────────────────────────────────────────────"
+
 # The step being run, so a failure can say where it stopped.
 STEP="start"
 
@@ -252,8 +289,95 @@ install_tarball() {
 # alone, so a second run of this script adds nothing.
 #
 #   $1 the directory to put on PATH
+# The shell a person's own terminals start.
+#
+# Not the shell running this script. The one-liner pipes into bash whatever they
+# use, so `$0` and `$BASH_VERSION` answer for the pipe. `$SHELL` is what a login
+# set out of the password database, and it survives the pipe because it is
+# exported. Where it is unset — a container, a cron, a `su` that kept nothing —
+# the database is read instead, and a machine answering neither is treated as
+# POSIX, which is what every shell here but fish is.
+login_shell() {
+  local shell="${SHELL:-}"
+
+  if [ -z "$shell" ]; then
+    shell="$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7 || true)"
+  fi
+
+  printf '%s' "${shell##*/}"
+}
+
+# Every rc file this script writes to, in the order a shell would meet them.
+#
+# `.bash_profile` is here because a bash login shell reads the first of
+# `.bash_profile`, `.bash_login` and `.profile` that exists and stops — so on a
+# machine carrying one, a line written to `.profile` is a line nothing opens.
+# `config.fish` is here because fish reads none of the others and takes a syntax
+# of its own (docs/adr/0024).
+rc_candidates() {
+  printf '%s\n' \
+    "$HOME/.bashrc" \
+    "$HOME/.bash_profile" \
+    "$HOME/.zshrc" \
+    "$HOME/.profile" \
+    "$HOME/.config/fish/config.fish"
+}
+
+# The rc a machine with none at all gets, named by the shell that will read it.
+#
+# zsh is why this is not always `.profile`: zsh reads `.zshenv`, `.zprofile` and
+# `.zshrc`, and never `.profile`. A fresh macOS account and anybody who ran
+# `chsh` before writing a rc are both in that state, and the file created for
+# them used to be one their shell does not open.
+create_default_rc() {
+  case "$(login_shell)" in
+    fish)
+      mkdir -p "$HOME/.config/fish"
+      touch "$HOME/.config/fish/config.fish"
+      ;;
+    zsh) touch "$HOME/.zshrc" ;;
+    # Two files, because bash splits the job between them: a login shell reads
+    # .profile, an interactive one reads .bashrc, and neither reads the other
+    # unless a line already there says so.
+    bash) touch "$HOME/.profile" "$HOME/.bashrc" ;;
+    *) touch "$HOME/.profile" ;;
+  esac
+}
+
+# The lines that put one directory on PATH, in the syntax that file's own reader
+# takes.
+#
+# fish is neither POSIX nor near it: `export PATH=…` is a syntax error there,
+# and its PATH is a list rather than a colon-joined string. Everything else here
+# — bash, zsh, dash, ksh — reads the `case` form.
+#
+# Each form carries the same guard, so a shell that already has the directory
+# does not put it on a second time, whoever put it there first.
+#
+#   $1 the rc file the lines are going into
+#   $2 the directory
+rc_block() {
+  local rc="$1" dir="$2"
+
+  printf '\n# Added by the prep bootstrap script.\n'
+
+  case "$rc" in
+    *.fish)
+      printf 'if not contains "%s" $PATH\n' "$dir"
+      printf '    set -gx PATH "%s" $PATH\n' "$dir"
+      printf 'end\n'
+      ;;
+    *)
+      printf 'case ":$PATH:" in\n'
+      printf '  *":%s:"*) ;;\n' "$dir"
+      printf '  *) export PATH="%s:$PATH" ;;\n' "$dir"
+      printf 'esac\n'
+      ;;
+  esac
+}
+
 persist_on_path() {
-  local dir="$1" rc written written_as
+  local dir="$1" rc written written_as any=0
 
   # A rc file may carry the directory spelled out or written through $HOME, and
   # both mean the same PATH. Either spelling counts as already done.
@@ -262,28 +386,89 @@ persist_on_path() {
     "$HOME"/*) written_as="\$HOME${dir#"$HOME"}" ;;
   esac
 
-  # Nothing to append to means nobody reads anything, so one file is created.
-  # .profile is the one every login shell reads, bash and sh alike.
-  [ -f "$HOME/.bashrc" ] || [ -f "$HOME/.zshrc" ] || [ -f "$HOME/.profile" ] ||
-    touch "$HOME/.profile"
+  # Nothing to append to means nobody reads anything, so one is created — the
+  # one this person's shell will actually read.
+  while IFS= read -r rc; do
+    if [ -f "$rc" ]; then any=1; fi
+  done < <(rc_candidates)
 
-  for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
+  [ "$any" -eq 1 ] || create_default_rc
+
+  while IFS= read -r rc; do
     [ -f "$rc" ] || continue
     grep -qF -e "$dir" -e "$written_as" "$rc" && continue
 
-    # The case is what keeps a shell that already carries the directory from
-    # putting it on a second time, whoever put it there first.
-    {
-      printf '\n# Added by the prep bootstrap script.\n'
-      printf 'case ":$PATH:" in\n'
-      printf '  *":%s:"*) ;;\n' "$dir"
-      printf '  *) export PATH="%s:$PATH" ;;\n' "$dir"
-      printf 'esac\n'
-    } >>"$rc"
-    written="$rc"
-  done
+    rc_block "$rc" "$dir" >>"$rc"
+    written="${written:+$written, }$rc"
+  done < <(rc_candidates)
 
   [ -z "${written:-}" ] || printf 'Put %s on PATH in %s.\n' "$dir" "$written"
+}
+
+# The file the terminal that started this run can read to catch up.
+#
+# A rc file is read when a shell starts, and the shell reading this script
+# started before any of these tools existed. So the rc lines `persist_on_path`
+# writes reach every terminal except the one a person is looking at — and that
+# is the terminal they are standing in when the script stops at the GitHub login
+# and when it finishes. Telling them to open a new one is right and it is not
+# enough: the stop at step 9 asks for work in that terminal.
+#
+# A script cannot put anything on its parent's PATH. The environment is copied
+# when the shell forks, and what this run exports dies with it, so the only way
+# in is the parent shell running something itself. What it runs is this file —
+# the shape rustup, nvm and bun's own installers all landed on, for this same
+# reason. Handing over a file to read beats handing over a line to paste: it is
+# shorter to type, it is the same words on every machine, and what it does can
+# be read before it is run (docs/adr/0024).
+#
+# Two files, because fish is not POSIX and would answer `export PATH=…` with a
+# syntax error. Each carries the guarded block `rc_block` writes into a rc, so
+# reading one twice puts the directory on once.
+write_env_files() {
+  local env_file
+
+  mkdir -p "$PREP_SHARE"
+
+  for env_file in "$PREP_SHARE/env.sh" "$PREP_SHARE/env.fish"; do
+    {
+      printf '# Written by the prep bootstrap script.\n'
+      printf '#\n'
+      printf '# Reading this puts what that run installed on PATH, for the shell that\n'
+      printf '# reads it. A terminal opened afterwards carries them already.\n'
+      rc_block "$env_file" "$HOME/.local/bin"
+      rc_block "$env_file" "$BUN_INSTALL/bin"
+    } >"$env_file"
+  done
+}
+
+# The one line that hands this terminal what the run installed.
+#
+# Named by its full path, because the shell it is pasted into has read no rc of
+# this script's making and `~` is the only part of it that would still expand.
+# fish reads `source` and not `.`, and reads the file written for it.
+env_line() {
+  case "$(login_shell)" in
+    fish) printf 'source %s' "$PREP_SHARE/env.fish" ;;
+    *) printf '. %s' "$PREP_SHARE/env.sh" ;;
+  esac
+}
+
+# The same line, drawn so nobody scrolls past it.
+#
+# It is the one instruction in this whole run that decides whether the next
+# command somebody types is found, and it arrives at the end of a screen of
+# install output. Rules above and below mark where the progress stops and the
+# instruction starts, and the command itself is the only thing on the screen in
+# reverse video.
+announce_env_line() {
+  printf '\n%s\n' "$RULE"
+  printf '%sThis terminal does not carry the tools this run installed.%s\n' "$BOLD" "$RESET"
+  printf 'It started before they existed, and a shell reads its rc once.\n'
+  printf '\n    %s %s %s\n\n' "$REVERSE$BOLD" "$(env_line)" "$RESET"
+  printf 'Run that line here — or open a new terminal, which carries them\n'
+  printf 'already.\n'
+  printf '%s\n' "$RULE"
 }
 
 # owner/repo out of a GitHub clone URL. A URL pointing anywhere else returns
@@ -365,13 +550,20 @@ cannot hand to you.
 
 Run this yourself, then run this script again:
   $GH_BIN auth login --git-protocol https --web
+  curl -fsSL $SCRIPT_URL | bash
 
-It is written out in full because this terminal has not read a shell rc since gh
-was installed, so a plain \`gh\` here would not be found. A new terminal carries
-it by name.
+gh is written out in full because this terminal has not read a shell rc since it
+was installed, so a plain \`gh\` here would not be found. That holds for
+everything this script installed — prep, claude, node. Read this file and the
+plain names work here too:
 
-It prints a one-time code. If no browser opens, open https://github.com/login/device
-in any browser you can reach and enter the code there.
+    ${REVERSE}${BOLD} $(env_line) ${RESET}
+
+A terminal opened after this run needs none of that.
+
+The login prints a one-time code. If no browser opens, open
+https://github.com/login/device in any browser you can reach and enter the code
+there.
 
 Everything installed so far stays installed, and the second run skips it."
   fi
@@ -542,8 +734,16 @@ fi
 
 # The installer writes a shell rc, which only the next shell reads. This run
 # needs bun now, so PATH is amended here as well.
-export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
+export BUN_INSTALL
 export PATH="$BUN_INSTALL/bin:$PATH"
+
+# bun's installer writes a rc of its own, and this writes one as well. It is not
+# a duplicate of it in any way that costs: bun writes `$BUN_INSTALL/bin`, this
+# writes the directory that expands to, so neither line finds the other and the
+# guard in each keeps a shell reading both from carrying the directory twice.
+# What it buys is that the directory holding prep no longer depends on another
+# vendor's installer having identified this machine's shell (docs/adr/0024).
+persist_on_path "$BUN_INSTALL/bin"
 
 have bun || fail "bun is installed but not on PATH. Expected it in $BUN_INSTALL/bin"
 bun --version
@@ -566,6 +766,11 @@ step "4/10 node"
 # at step 9.
 export PATH="$HOME/.local/bin:$PATH"
 persist_on_path "$HOME/.local/bin"
+
+# Both directories are settled now, so the file for the terminal running this is
+# written here — at the same moment the rc files get them, and before any step
+# that can stop and hand it back (docs/adr/0024).
+write_env_files
 
 if have node; then
   echo "Node is already here."
@@ -821,17 +1026,22 @@ printf '\n==> Done\n'
 
 # A script cannot move the shell that called it, so the lines that finish the
 # job are printed rather than run. They are given in full, ready to paste.
+#
+# This terminal is the one shell no rc file this run wrote will ever reach, and
+# every line below names a tool by a name it does not know yet. So the line that
+# fixes it comes first, before any of them (docs/adr/0024).
+announce_env_line
+
 if [ "$PROJECT_READY" -eq 1 ]; then
-  printf 'Your project is at %s\n' "$PROJECT_DIR"
-  printf '\nStart working — open a new terminal, so it carries the tools this\n'
-  printf 'script installed, and run these two lines:\n'
+  printf '\nYour project is at %s\n' "$PROJECT_DIR"
+  printf '\nStart working — run these two lines:\n'
   printf '  cd %s\n' "$PROJECT_DIR"
   printf '  claude\n'
 else
   # The machine is finished and the project is the only thing outstanding, so
   # the line that comes back for it is the one worth printing. Everything
   # already installed is skipped on that second run.
-  printf 'This machine is ready. No project was named, so nothing was cloned\n'
+  printf '\nThis machine is ready. No project was named, so nothing was cloned\n'
   printf 'and nothing was set up.\n'
 
   # The identity sits behind the GitHub login, and both belong to the project
