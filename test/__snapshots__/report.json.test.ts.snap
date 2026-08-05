@@ -47,7 +47,7 @@ exports[`JSON report snapshots macOS · installed, gaps, and not applicable mixe
 "
 `;
 
-exports[`JSON report snapshots Linux · including the binary name quirk 1`] = `
+exports[`JSON report snapshots Linux · including a binary the distribution renames 1`] = `
 "{
   "platform": "linux",
   "results": [
@@ -80,12 +80,12 @@ exports[`JSON report snapshots Linux · including the binary name quirk 1`] = `
     },
     {
       "id": "fd",
-      "status": "installed",
-      "binary": "fdfind",
-      "path": "/usr/bin/fdfind",
+      "status": "missing",
+      "binary": "fd",
+      "path": null,
       "guidance": {
         "kind": "command",
-        "command": "sudo apt install fd-find"
+        "command": "sudo apt install fd-find && fdfind=\\"$(command -v fdfind)\\" && mkdir -p ~/.local/bin && ln -sf \\"$fdfind\\" ~/.local/bin/fd"
       }
     }
   ]

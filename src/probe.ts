@@ -19,8 +19,11 @@ export function check(spec: ToolSpec, platform: Platform, which: WhichFn = bunWh
     return { id: spec.id, status: "unsupported", binary: null, path: null, guidance: null };
   }
 
-  // This one line absorbs per-platform name quirks, so no branch has to.
-  const binary = platformSpec.binary ?? spec.binary;
+  // The canonical name, on every platform. A distribution that ships the tool
+  // under another one says so in `renamed`, and that changes what closes the gap
+  // rather than what is asked for: a machine answering only to batcat answers to
+  // nothing anybody types.
+  const binary = spec.binary;
   const path = which(binary);
 
   return {

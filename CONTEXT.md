@@ -289,6 +289,26 @@ manager that is not there; the report keeps those gap lines and takes their
 commands back. Any gap at all makes doctor exit 1, which is an observation and
 not a failure — a tool error is 2.
 
+**renamed binary**:
+The name a distribution ships a tool's executable under, when the tool's own
+name was taken by a package that was there first. Debian and Ubuntu ship `bat`
+as `batcat` and `fd-find` as `fdfind`; brew ships both under their own names, so
+this belongs to one platform's entry in the registry and to no branch in the
+code. The table records it beside that platform's guidance, and the check does
+not read it.
+
+The canonical name is what counts. It is what a person types, what an alias
+expands to and what a repository's own scripts call, so the check asks for `bat`
+on every platform, and a machine answering only to `batcat` is a gap like any
+other — reported as one in the human report and in `--json` alike. What closes
+it is a single command that installs the package and puts the canonical name on
+PATH, as a symlink in `~/.local/bin`, the directory the bootstrap script exports
+for its own run and writes into a shell rc for the ones that come after
+(docs/adr/0023). The package is half of what a finished machine holds and the
+name is the other half. prep creates neither: it names the command, and the
+bootstrap's gap step runs it (docs/adr/0010).
+_Avoid_: alias, binary override
+
 **guidance**:
 What prep says about a gap, at one of exactly two levels: a manual note, with a
 URL where there is one, or a verified command. There is no third level, because

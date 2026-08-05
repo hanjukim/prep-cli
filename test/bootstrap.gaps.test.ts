@@ -38,6 +38,30 @@ describe("installCommands", () => {
     expect(installCommands(report)).toEqual(["one", "two"]);
   });
 
+  // The gap step is what puts the canonical name on this machine, and it runs
+  // every command whole, `&&` and all — bash -c is what reads them. A machine
+  // holding batcat alone still has the gap, so the command still comes back.
+  test("carries the whole command for a binary the distribution renamed", () => {
+    const commands = installCommands(
+      doctor("linux", { apt: "/usr/bin/apt", batcat: "/usr/bin/batcat", fdfind: "/usr/bin/fdfind" }),
+    );
+    expect(commands).toContain(
+      'sudo apt install -y bat && batcat="$(command -v batcat)" && ' +
+        'mkdir -p ~/.local/bin && ln -sf "$batcat" ~/.local/bin/bat',
+    );
+    expect(commands).toContain(
+      'sudo apt install -y fd-find && fdfind="$(command -v fdfind)" && ' +
+        'mkdir -p ~/.local/bin && ln -sf "$fdfind" ~/.local/bin/fd',
+    );
+  });
+
+  test("says nothing about a machine that already answers to bat and fd", () => {
+    const commands = installCommands(
+      doctor("linux", { apt: "/usr/bin/apt", bat: "/home/me/.local/bin/bat", fd: "/home/me/.local/bin/fd" }),
+    );
+    expect(commands.some((command) => command.includes("ln -sf"))).toBe(false);
+  });
+
   test("says nothing about a tool that is already here", () => {
     const commands = installCommands(doctor("darwin", { brew: "b", rg: "/usr/bin/rg" }));
     expect(commands).not.toContain("brew install ripgrep");

@@ -20,7 +20,7 @@ const ripgrep: ToolSpec = {
   },
 };
 
-/** An entry whose binary name differs per platform. Pins down the fd quirk from ticket #2 up front. */
+/** An entry one platform's distribution ships under another name. The fd and bat shape. */
 const renamed: ToolSpec = {
   id: "renamed",
   binary: "orig",
@@ -29,7 +29,7 @@ const renamed: ToolSpec = {
   platforms: {
     darwin: { guidance: { kind: "command", command: "brew install renamed" } },
     linux: {
-      binary: "renamed-on-linux",
+      renamed: "renamed-on-linux",
       guidance: { kind: "command", command: "sudo apt install renamed" },
     },
   },
@@ -86,18 +86,32 @@ describe("check", () => {
     expect(asked).toEqual([]);
   });
 
-  test("a platform override binary name beats the default", () => {
+  test("the canonical name is what is asked for, whatever the distribution ships", () => {
     const asked: string[] = [];
     const result = check(renamed, "linux", (binary) => {
       asked.push(binary);
       return binary === "renamed-on-linux" ? "/usr/bin/renamed-on-linux" : null;
     });
-    expect(asked).toEqual(["renamed-on-linux"]);
-    expect(result.status).toBe("installed");
-    expect(result.binary).toBe("renamed-on-linux");
+    expect(asked).toEqual(["orig"]);
+    expect(result.status).toBe("missing");
+    expect(result.binary).toBe("orig");
   });
 
-  test("with no override, the default binary name is used", () => {
+  test("the name the distribution ships is not an answer to the name people type", () => {
+    const result = check(renamed, "linux", fakeWhich({ "renamed-on-linux": "/usr/bin/renamed-on-linux" }));
+    expect(result.status).toBe("missing");
+    expect(result.path).toBeNull();
+    expect(result.guidance).toEqual({ kind: "command", command: "sudo apt install renamed" });
+  });
+
+  test("the canonical name found is installed, and carries the path it was found at", () => {
+    const result = check(renamed, "linux", fakeWhich({ orig: "/home/me/.local/bin/orig" }));
+    expect(result.status).toBe("installed");
+    expect(result.binary).toBe("orig");
+    expect(result.path).toBe("/home/me/.local/bin/orig");
+  });
+
+  test("a platform that renames nothing is asked the same question", () => {
     const asked: string[] = [];
     check(renamed, "darwin", (binary) => {
       asked.push(binary);
@@ -126,25 +140,41 @@ describe("lookup names in the real registry", () => {
     return names;
   }
 
-  test("fd looks up fdfind on Linux and fd on macOS", () => {
-    expect(asked("fd", "linux")).toEqual(["fdfind"]);
+  test("fd is looked up as fd on both platforms, batcat and fdfind notwithstanding", () => {
+    expect(asked("fd", "linux")).toEqual(["fd"]);
     expect(asked("fd", "darwin")).toEqual(["fd"]);
   });
 
-  test("bat looks up batcat on Linux and bat on macOS", () => {
-    expect(asked("bat", "linux")).toEqual(["batcat"]);
+  test("bat is looked up as bat on both platforms", () => {
+    expect(asked("bat", "linux")).toEqual(["bat"]);
     expect(asked("bat", "darwin")).toEqual(["bat"]);
   });
 
-  test("the looked-up name and the found path land in the result", () => {
+  // The package is on this machine and the name is not, which is the state a
+  // Debian install of bat leaves behind. It is a gap: nothing on this machine
+  // answers to bat, and bat is what anybody types.
+  test("the package under its Debian name alone leaves the entry missing", () => {
+    const bat = all().find((s) => s.id === "bat")!;
+    const result = check(bat, "linux", fakeWhich({ batcat: "/usr/bin/batcat" }));
+    expect(result.status).toBe("missing");
+    expect(result.binary).toBe("bat");
+    expect(result.path).toBeNull();
+  });
+
+  test("the canonical name and the found path land in the result", () => {
     const fd = all().find((s) => s.id === "fd")!;
-    const result = check(fd, "linux", fakeWhich({ fdfind: "/usr/bin/fdfind" }));
+    const result = check(fd, "linux", fakeWhich({ fd: "/home/me/.local/bin/fd" }));
     expect(result).toEqual({
       id: "fd",
       status: "installed",
-      binary: "fdfind",
-      path: "/usr/bin/fdfind",
-      guidance: { kind: "command", command: "sudo apt install -y fd-find" },
+      binary: "fd",
+      path: "/home/me/.local/bin/fd",
+      guidance: {
+        kind: "command",
+        command:
+          'sudo apt install -y fd-find && fdfind="$(command -v fdfind)" && ' +
+          'mkdir -p ~/.local/bin && ln -sf "$fdfind" ~/.local/bin/fd',
+      },
     });
   });
 

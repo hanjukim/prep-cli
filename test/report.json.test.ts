@@ -14,7 +14,7 @@ function fakeWhich(found: Record<string, string>): WhichFn {
  * A growing tool list must not shake the shape of the JSON contract.
  *
  * Four entries cover the contract's four branches:
- * manual + url, manual alone, command, and a per-platform binary name quirk.
+ * manual + url, manual alone, command, and a binary one platform renames.
  */
 const FIXTURE: readonly ToolSpec[] = [
   {
@@ -54,7 +54,15 @@ const FIXTURE: readonly ToolSpec[] = [
     tier: "standard",
     platforms: {
       darwin: { guidance: { kind: "command", command: "brew install fd" } },
-      linux: { binary: "fdfind", guidance: { kind: "command", command: "sudo apt install fd-find" } },
+      linux: {
+        renamed: "fdfind",
+        guidance: {
+          kind: "command",
+          command:
+            'sudo apt install fd-find && fdfind="$(command -v fdfind)" && ' +
+            'mkdir -p ~/.local/bin && ln -sf "$fdfind" ~/.local/bin/fd',
+        },
+      },
     },
   },
 ];
@@ -74,7 +82,7 @@ describe("JSON report snapshots", () => {
     ).toMatchSnapshot();
   });
 
-  test("Linux · including the binary name quirk", () => {
+  test("Linux · including a binary the distribution renames", () => {
     expect(render("linux", { apt: "/usr/bin/apt", fdfind: "/usr/bin/fdfind" })).toMatchSnapshot();
   });
 });
@@ -124,13 +132,27 @@ describe("the JSON contract", () => {
     });
   });
 
-  test("the platform-swapped binary name appears in binary as is", () => {
+  // The contract carries the name that was asked for, and the name that was
+  // asked for is the canonical one. A machine answering only to fdfind is a gap,
+  // and the script reading this runs the command that closes it.
+  test("a renamed binary is emitted under the canonical name, and as a gap", () => {
     const payload = parse("linux", { fdfind: "/usr/bin/fdfind" }) as {
-      results: { id: string; binary: string | null; path: string | null }[];
+      results: { id: string; status: string; binary: string | null; path: string | null }[];
     };
     const fd = payload.results.find((result) => result.id === "fd");
-    expect(fd?.binary).toBe("fdfind");
-    expect(fd?.path).toBe("/usr/bin/fdfind");
+    expect(fd?.binary).toBe("fd");
+    expect(fd?.status).toBe("missing");
+    expect(fd?.path).toBeNull();
+  });
+
+  test("the canonical name found is where the path comes from", () => {
+    const payload = parse("linux", { fd: "/home/me/.local/bin/fd" }) as {
+      results: { id: string; status: string; binary: string | null; path: string | null }[];
+    };
+    const fd = payload.results.find((result) => result.id === "fd");
+    expect(fd?.binary).toBe("fd");
+    expect(fd?.status).toBe("installed");
+    expect(fd?.path).toBe("/home/me/.local/bin/fd");
   });
 
   test("guidance branches on kind, and url appears only when present", () => {

@@ -19,15 +19,35 @@ export type Guidance =
   | { kind: "command"; command: string };
 
 export type PlatformSpec = {
-  /** Set only when the name differs from the default binary. */
-  binary?: string;
+  /**
+   * The name this platform's package ships the executable under, when that is
+   * not the tool's own name. Debian ships bat as batcat and fd-find as fdfind,
+   * because both names were taken by packages that were there first.
+   *
+   * It does not change what is looked up. The canonical name is what counts —
+   * it is what anybody types and what every alias and script names — so a
+   * machine holding batcat and no bat is a gap like any other, and the guidance
+   * beside this is what closes it: one command that installs the package and
+   * puts the canonical name on PATH.
+   *
+   * Recording it here rather than in the command alone is what keeps the two
+   * entries one table and not two special cases.
+   */
+  renamed?: string;
   guidance: Guidance;
 };
 
 export type ToolSpec = {
   /** The name people call it by. "ripgrep" */
   id: string;
-  /** The executable looked up by default. "rg" */
+  /**
+   * The name the tool is called by, and the name looked up on every platform.
+   * "rg"
+   *
+   * A distribution that ships the executable under another one says so in that
+   * platform's `renamed`, and that changes what closes the gap rather than what
+   * is asked for.
+   */
   binary: string;
   /** One-line purpose. */
   summary: string;
