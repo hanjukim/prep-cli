@@ -278,8 +278,8 @@ _Avoid_: guidance, hint, suggestion
 **check result**:
 What doctor read about one registry entry: its id, its status, the binary
 actually looked up, where that binary was found, the name this platform's
-package ships that binary under where it is not the same one, and the guidance
-that goes with it. The status is one of three — **installed**, **missing**, or **unsupported** —
+package ships that binary under where it is not the same one, and the
+guidance that goes with it. The status is one of three — **installed**, **missing**, or **unsupported** —
 and the last one means this platform has no entry for the tool, so the question
 does not apply here rather than the answer being no. It is a read and nothing
 else: PATH is walked with `which`, no subprocess is started, and every path

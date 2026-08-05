@@ -5,6 +5,7 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   readlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -28,15 +29,17 @@ import type { Platform, WhichFn } from "../src/types.ts";
  * The shell function is lifted out of the script by name rather than the script
  * being sourced, because the script installs a machine the moment it is read.
  */
-const SCRIPT = Bun.file(new URL("../scripts/bootstrap.sh", import.meta.url)).text();
+const SCRIPT = readFileSync(new URL("../scripts/bootstrap.sh", import.meta.url), "utf8");
 
 /** One shell function, from its header to the closing brace at column zero. */
-async function shellFunction(name: string): Promise<string> {
-  const source = await SCRIPT;
-  const match = source.match(new RegExp(`^${name}\\(\\) \\{\\n[\\s\\S]*?\\n\\}$`, "m"));
+function shellFunction(name: string): string {
+  const match = SCRIPT.match(new RegExp(`^${name}\\(\\) \\{\\n[\\s\\S]*?\\n\\}$`, "m"));
   if (match === null) throw new Error(`${name} is not in scripts/bootstrap.sh`);
   return match[0];
 }
+
+/** `have` and the function under test, which is everything link_renamed stands on. */
+const LINK_FUNCTIONS = ["have", "link_renamed"].map(shellFunction).join("\n");
 
 function fakeWhich(found: Record<string, string>): WhichFn {
   return (binary) => found[binary] ?? null;
@@ -128,11 +131,11 @@ describe("renderLinks", () => {
  * on PATH too, because a link this function wrote is what the next run has to
  * find.
  */
-async function linkInFreshHome(
+function linkInFreshHome(
   pairs: string,
   shipped: string[] = [],
   existing: string[] = [],
-): Promise<{ home: string; failed: string }> {
+): { home: string; failed: string } {
   const home = mkdtempSync(join(tmpdir(), "prep-links-"));
   const packages = join(home, "usr-bin");
   mkdirSync(packages, { recursive: true });
@@ -145,7 +148,6 @@ async function linkInFreshHome(
     chmodSync(path, 0o755);
   }
 
-  const source = [await shellFunction("have"), await shellFunction("link_renamed")].join("\n");
   const result = Bun.spawnSync({
     cmd: [
       "bash",
@@ -153,7 +155,7 @@ async function linkInFreshHome(
       // What it linked goes to its own stdout and is read off the file system
       // below; what stdout carries here is the list of names it could not give,
       // which is what the script prints at the end of a run.
-      `set -Eeuo pipefail\nFAILED_LINKS=""\n${source}\nlink_renamed <<<"$1" >/dev/null\nprintf '%s' "$FAILED_LINKS"`,
+      `set -Eeuo pipefail\nFAILED_LINKS=""\n${LINK_FUNCTIONS}\nlink_renamed <<<"$1" >/dev/null\nprintf '%s' "$FAILED_LINKS"`,
       "bash",
       pairs,
     ],
@@ -183,8 +185,8 @@ function lstatSafe(path: string): boolean {
 }
 
 describe("link_renamed", () => {
-  test("gives the canonical name to what the package installed", async () => {
-    const { home, failed } = await linkInFreshHome("bat\tbatcat", ["batcat"]);
+  test("gives the canonical name to what the package installed", () => {
+    const { home, failed } = linkInFreshHome("bat\tbatcat", ["batcat"]);
     expect(linkTarget(home, "bat")).toBe(join(home, "usr-bin", "batcat"));
     expect(failed).toBe("");
   });
@@ -192,22 +194,21 @@ describe("link_renamed", () => {
   // Somebody who built fd from source, or took it from a backport, keeps what
   // they chose. A link an earlier run made answers here too, which is what makes
   // a second run of the whole script write nothing.
-  test("leaves a name that already answers exactly as it is", async () => {
-    const { home } = await linkInFreshHome("fd\tfdfind", ["fdfind"], ["fd"]);
+  test("leaves a name that already answers exactly as it is", () => {
+    const { home } = linkInFreshHome("fd\tfdfind", ["fdfind"], ["fd"]);
     expect(lstatSync(join(home, ".local/bin/fd")).isSymbolicLink()).toBe(false);
   });
 
-  test("running it twice changes nothing the second time", async () => {
-    const { home } = await linkInFreshHome("bat\tbatcat", ["batcat"]);
+  test("running it twice changes nothing the second time", () => {
+    const { home } = linkInFreshHome("bat\tbatcat", ["batcat"]);
     const first = linkTarget(home, "bat");
 
     // The same pair again, over the HOME the first run left behind.
-    const source = [await shellFunction("have"), await shellFunction("link_renamed")].join("\n");
     const again = Bun.spawnSync({
       cmd: [
         "bash",
         "-c",
-        `set -Eeuo pipefail\nFAILED_LINKS=""\n${source}\nlink_renamed <<<"$1"`,
+        `set -Eeuo pipefail\nFAILED_LINKS=""\n${LINK_FUNCTIONS}\nlink_renamed <<<"$1"`,
         "bash",
         "bat\tbatcat",
       ],
@@ -222,23 +223,23 @@ describe("link_renamed", () => {
   // `ln -sf ""` exits 0 and leaves a symlink pointing at nothing, which is the
   // machine that reports itself finished and runs neither name. Nothing is
   // written, and the name is reported like any other gap that would not close.
-  test("writes no link at all when the shipped name answers nothing", async () => {
-    const { home, failed } = await linkInFreshHome("fd\tfdfind");
+  test("writes no link at all when the shipped name answers nothing", () => {
+    const { home, failed } = linkInFreshHome("fd\tfdfind");
     expect(lstatSafe(join(home, ".local/bin/fd"))).toBe(false);
     expect(failed).toContain("fd");
     expect(failed).toContain("fdfind");
   });
 
-  test("takes the tools one by one, so one missing package costs only its own name", async () => {
-    const { home, failed } = await linkInFreshHome("fd\tfdfind\nbat\tbatcat", ["batcat"]);
+  test("takes the tools one by one, so one missing package costs only its own name", () => {
+    const { home, failed } = linkInFreshHome("fd\tfdfind\nbat\tbatcat", ["batcat"]);
     expect(lstatSafe(join(home, ".local/bin/fd"))).toBe(false);
     expect(linkTarget(home, "bat")).toBe(join(home, "usr-bin", "batcat"));
     expect(failed).toContain("fd");
     expect(failed).not.toContain("bat (");
   });
 
-  test("nothing to link is a run that writes nothing and says nothing", async () => {
-    const { home, failed } = await linkInFreshHome("");
+  test("nothing to link is a run that writes nothing and says nothing", () => {
+    const { home, failed } = linkInFreshHome("");
     expect(failed).toBe("");
     expect(existsSync(join(home, ".local/bin"))).toBe(true);
   });

@@ -1019,7 +1019,12 @@ fi
 # The reader runs in its own command and the loop in this shell, rather than the
 # two joined by a pipe: a pipe puts the loop in a subshell, and every failed link
 # it collected would go with it when the subshell ended.
-links="$(printf '%s' "$report" | bun run "$PREP_DIR/scripts/links.ts" || true)"
+#
+# Nothing catches a reader that refuses, for the reason the gap reader above is
+# uncaught: it refuses only over a report that is not the contract, and a machine
+# that took that quietly would report itself finished and run neither name. That
+# is the silence this step exists to close, so it ends the run and names the step.
+links="$(printf '%s' "$report" | bun run "$PREP_DIR/scripts/links.ts")"
 
 if [ -n "$links" ]; then
   link_renamed <<<"$links"

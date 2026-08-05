@@ -49,10 +49,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function optionalString(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
-}
-
 /**
  * Reads one result, or nothing at all.
  *
@@ -66,7 +62,7 @@ function toEntry(value: unknown): Entry | null {
   if (value.binary !== null && typeof value.binary !== "string") return null;
   if (value.renamed !== null && typeof value.renamed !== "string") return null;
 
-  return { binary: optionalString(value.binary), renamed: optionalString(value.renamed) };
+  return { binary: value.binary, renamed: value.renamed };
 }
 
 /**
