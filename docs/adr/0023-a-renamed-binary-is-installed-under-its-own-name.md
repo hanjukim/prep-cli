@@ -1,10 +1,11 @@
 # ADR-0023: A tool the distribution renames is installed under its own name
 
 **Date:** 2026-08-05
-**Status:** Accepted — narrows ADR-0009's third decision, which put the tool
-list in the registry, by widening what one entry is allowed to say about a
-tool. The per-platform `binary` override it replaces was in the table from the
-first registry.
+**Status:** Accepted. It narrows no record before it. The per-platform `binary`
+override it replaces was in the registry from the first table and was never
+argued in a record of its own, and ADR-0009's third decision — that the tool
+list lives in the registry and the script executes what prep names — holds here
+unchanged, which is what decision 6 below restates.
 **Sources:** `https://github.com/hanjukim/prep-cli/issues/3`; ADR-0002,
 ADR-0009, ADR-0010, ADR-0013, ADR-0017, ADR-0022; `CONTEXT.md` under **check
 result**, **gap** and **guidance**; Debian's `bat` and `fd-find` packages,
@@ -53,14 +54,21 @@ to tell a finished machine from one that still owes a name.
 3. **The guidance closes the name as well as the package.** One command:
 
    ```
-   sudo apt install -y <package> && mkdir -p ~/.local/bin && \
-     ln -sf "$(command -v <shipped>)" ~/.local/bin/<canonical>
+   sudo apt install -y <package> && <shipped>="$(command -v <shipped>)" && \
+     mkdir -p ~/.local/bin && ln -sf "$<shipped>" ~/.local/bin/<canonical>
    ```
 
    It runs unattended, which is what the bootstrap's gap step needs — `-y`
    answers apt (ADR-0009), and nothing else in it asks anything. It says the
    same thing twice: apt reports an installed package and stops, `mkdir -p`
-   accepts a directory that is there, and `ln -sf` replaces the link.
+   accepts a directory that is there, and `ln -sf` replaces the link. **The
+   lookup is a step of the chain and not an argument to `ln`.** Written inside
+   the `ln` arguments it is a substitution rather than a link: a lookup finding
+   nothing would sail past `&&`, `ln` would make a symlink pointing at nothing,
+   and the command would exit 0 — so the gap step would count a machine as
+   finished where the name still does not run. Resolving it into a name of its
+   own first is what ends the command there instead, and the bootstrap then
+   collects it like any other gap that would not close.
 4. **The name lands in `~/.local/bin`.** The bootstrap script exports that
    directory at step 4, before the gap step runs, and `persist_on_path` writes it
    into every shell rc — so the terminal opened after the run carries the name
@@ -93,7 +101,12 @@ to tell a finished machine from one that still owes a name.
   consequences below.
 - **`command -v` rather than a fixed path.** Where apt puts an executable is
   apt's business. Reading it back also means the link points at what was just
-  installed, on whatever release this is.
+  installed, on whatever release this is. It is the fifth turn of the same screw
+  as the context above, one clause further in: a lookup that answers with
+  nothing is a check that passed on the wrong thing, so the answer is bound to a
+  name and the chain stops on it. `ln -sf "" <target>` was verified to exit 0
+  and leave a symlink pointing at nothing, which is exactly the machine this
+  record is about.
 - **It reads correctly on a machine that is already finished.** A machine where
   `bat` runs is installed and gets no command at all, so a second bootstrap does
   nothing and says nothing — which is the same standard every other guarded step

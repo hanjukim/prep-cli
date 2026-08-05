@@ -46,10 +46,12 @@ describe("installCommands", () => {
       doctor("linux", { apt: "/usr/bin/apt", batcat: "/usr/bin/batcat", fdfind: "/usr/bin/fdfind" }),
     );
     expect(commands).toContain(
-      'sudo apt install -y bat && mkdir -p ~/.local/bin && ln -sf "$(command -v batcat)" ~/.local/bin/bat',
+      'sudo apt install -y bat && batcat="$(command -v batcat)" && ' +
+        'mkdir -p ~/.local/bin && ln -sf "$batcat" ~/.local/bin/bat',
     );
     expect(commands).toContain(
-      'sudo apt install -y fd-find && mkdir -p ~/.local/bin && ln -sf "$(command -v fdfind)" ~/.local/bin/fd',
+      'sudo apt install -y fd-find && fdfind="$(command -v fdfind)" && ' +
+        'mkdir -p ~/.local/bin && ln -sf "$fdfind" ~/.local/bin/fd',
     );
   });
 

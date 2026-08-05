@@ -85,7 +85,7 @@ exports[`JSON report snapshots Linux · including a binary the distribution rena
       "path": null,
       "guidance": {
         "kind": "command",
-        "command": "sudo apt install fd-find && mkdir -p ~/.local/bin && ln -sf \\"$(command -v fdfind)\\" ~/.local/bin/fd"
+        "command": "sudo apt install fd-find && fdfind=\\"$(command -v fdfind)\\" && mkdir -p ~/.local/bin && ln -sf \\"$fdfind\\" ~/.local/bin/fd"
       }
     }
   ]

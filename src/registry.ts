@@ -218,6 +218,11 @@ const HANDOFF_SKILL = "setup-matt-pocock-skills";
  *
  * The name is resolved with `command -v` rather than written as a fixed path,
  * because where apt puts an executable is apt's business and not this table's.
+ * It is resolved into a name of its own first, so that a lookup finding nothing
+ * ends the command there. Inside the `ln` arguments it would be a substitution
+ * rather than a link in the chain: an empty answer would sail past `&&`, `ln`
+ * would make a symlink pointing at nothing, and the whole command would report
+ * success on a machine where the name still does not run.
  *
  * prep runs none of this (docs/adr/0010). It names the command, and the gap step
  * of the bootstrap script executes it like every other one.
@@ -232,8 +237,8 @@ function renamedOnDebian(pkg: string, shipped: string, canonical: string): Platf
     guidance: {
       kind: "command",
       command:
-        `sudo apt install -y ${pkg} && mkdir -p ~/.local/bin && ` +
-        `ln -sf "$(command -v ${shipped})" ~/.local/bin/${canonical}`,
+        `sudo apt install -y ${pkg} && ${shipped}="$(command -v ${shipped})" && ` +
+        `mkdir -p ~/.local/bin && ln -sf "$${shipped}" ~/.local/bin/${canonical}`,
     },
   };
 }

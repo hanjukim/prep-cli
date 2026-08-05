@@ -172,7 +172,8 @@ describe("lookup names in the real registry", () => {
       guidance: {
         kind: "command",
         command:
-          'sudo apt install -y fd-find && mkdir -p ~/.local/bin && ln -sf "$(command -v fdfind)" ~/.local/bin/fd',
+          'sudo apt install -y fd-find && fdfind="$(command -v fdfind)" && ' +
+          'mkdir -p ~/.local/bin && ln -sf "$fdfind" ~/.local/bin/fd',
       },
     });
   });

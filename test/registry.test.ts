@@ -198,7 +198,22 @@ describe("registry", () => {
       const command = linux.guidance.kind === "command" ? linux.guidance.command : "";
       expect(command).toContain("sudo apt install -y ");
       expect(command).toContain("mkdir -p ~/.local/bin");
-      expect(command).toContain(`ln -sf "$(command -v ${linux.renamed})" ~/.local/bin/${binary}`);
+      expect(command).toContain(`ln -sf "$${linux.renamed}" ~/.local/bin/${binary}`);
+    }
+  });
+
+  // A lookup that finds nothing has to end the command, not travel into ln's
+  // arguments. Inside them it would be a substitution rather than a link in the
+  // chain: an empty answer sails past &&, ln makes a symlink pointing at
+  // nothing, and the command reports success on a machine where the name still
+  // does not run.
+  test("a renamed binary's command resolves the shipped name as a step of its own", () => {
+    for (const spec of all()) {
+      const linux = spec.platforms.linux;
+      if (linux?.renamed === undefined) continue;
+      const command = linux.guidance.kind === "command" ? linux.guidance.command : "";
+      expect(command).toContain(`&& ${linux.renamed}="$(command -v ${linux.renamed})" &&`);
+      expect(command).not.toContain("ln -sf \"$(command -v");
     }
   });
 
@@ -253,12 +268,14 @@ describe("registry", () => {
       return guidance.kind === "command" ? guidance.command : "";
     };
     expect(command("fd", "linux")).toBe(
-      'sudo apt install -y fd-find && mkdir -p ~/.local/bin && ln -sf "$(command -v fdfind)" ~/.local/bin/fd',
+      'sudo apt install -y fd-find && fdfind="$(command -v fdfind)" && ' +
+        'mkdir -p ~/.local/bin && ln -sf "$fdfind" ~/.local/bin/fd',
     );
     expect(command("ripgrep", "darwin")).toBe("brew install ripgrep");
     expect(command("ripgrep", "linux")).toBe("sudo apt install -y ripgrep");
     expect(command("bat", "linux")).toBe(
-      'sudo apt install -y bat && mkdir -p ~/.local/bin && ln -sf "$(command -v batcat)" ~/.local/bin/bat',
+      'sudo apt install -y bat && batcat="$(command -v batcat)" && ' +
+        'mkdir -p ~/.local/bin && ln -sf "$batcat" ~/.local/bin/bat',
     );
     expect(command("gh", "darwin")).toBe("brew install gh");
     expect(command("gh", "linux")).toBe("sudo apt install -y gh");

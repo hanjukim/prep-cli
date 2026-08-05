@@ -281,7 +281,8 @@ describe("human report content", () => {
   test("the command for a renamed binary puts the canonical name on PATH", () => {
     const output = render("linux", { ...APT, batcat: "/usr/bin/batcat" });
     expect(output).toContain(
-      'sudo apt install -y bat && mkdir -p ~/.local/bin && ln -sf "$(command -v batcat)" ~/.local/bin/bat',
+      'sudo apt install -y bat && batcat="$(command -v batcat)" && ' +
+        'mkdir -p ~/.local/bin && ln -sf "$batcat" ~/.local/bin/bat',
     );
   });
 
