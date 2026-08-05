@@ -310,10 +310,17 @@ the world that precedes it, so the script takes that place.
 
 The script opens the chain, reads `prep doctor --json` to close the gaps that
 are left, clones the prepared repository, and runs `prep setup` in it. Which
-repository that is arrives as the script's first argument — the one thing it
-cannot work out for itself — so the entry point stays the single line a person
-can be handed, `curl … | bash -s -- <git url>`, rather than a line with an
-environment variable pinned to the front of it. It ends by printing the two
+repository that is — the one thing it cannot work out for itself — **is asked
+for at step 11, where the answer is about to be used**, so the entry point stays
+the single line a person can be handed, `curl … | bash`, with nothing to paste
+onto the end of it and no environment variable pinned to the front. The question
+comes late on purpose: by then the machine is built, so somebody who has no
+repository yet has already got everything a repository would have needed.
+Answering is optional, and it is the one question in the script whose refusal is
+an ending rather than a stop — Enter takes the run to the same close a run with
+nothing to clone already had. Two runs are never asked at all: one that set
+`PREPARED_REPO` in the environment has answered ahead of the question
+(docs/adr/0015), and one with no terminal has nobody to ask. It ends by printing the two
 commands that finish the job, `cd` into the project and `claude`, because a
 script cannot move the shell that called it. On macOS
 the brew installer pulls in the Command Line Tools, so git arrives with it; on

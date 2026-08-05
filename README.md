@@ -26,14 +26,16 @@ bun, Node, gh, a GitHub login, a git identity, Claude Code, and prep itself — 
 a shell script takes that place:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Inkflockteam/prep-cli/main/scripts/bootstrap.sh | bash -s -- <git url>
+curl -fsSL https://raw.githubusercontent.com/Inkflockteam/prep-cli/main/scripts/bootstrap.sh | bash
 ```
 
-The git url is the repository you came to work in. The script opens the chain,
-closes what `prep doctor --json` reports, clones that repository, and runs
-`prep setup` in it. It stops in front of the GitHub login, because a browser
-login cannot be performed on somebody's behalf, and running it again picks up
-where it stopped.
+Nothing goes after that line. The script opens the chain, closes what
+`prep doctor --json` reports, and then asks for the repository you came to work
+in — the one thing it cannot work out for itself. It clones what you name and
+runs `prep setup` in it. Press Enter instead and the run stops at a machine that
+is ready, and tells you how to come back for the project. It stops in front of
+the GitHub login too, because a browser login cannot be performed on somebody's
+behalf, and running it again picks up where it stopped.
 
 **That URL is private today.** Both the script and the clone behind it sit in a
 repository an unauthenticated request cannot see, and GitHub answers such a

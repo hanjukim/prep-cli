@@ -2,11 +2,14 @@
 #
 # The first thing a person runs (docs/adr/0009).
 #
-#   curl -fsSL https://raw.githubusercontent.com/Inkflockteam/prep-cli/main/scripts/bootstrap.sh | bash -s -- <git url>
+#   curl -fsSL https://raw.githubusercontent.com/Inkflockteam/prep-cli/main/scripts/bootstrap.sh | bash
 #
-# The git url is the repository the person came here to work in. It is the one
-# thing this script cannot know, and passing it as an argument rather than an
-# environment variable keeps the whole entry point to a single line.
+# The line takes nothing after it. The repository the person came here to work
+# in is the one thing this script cannot know, so step 11 asks for it, at the
+# point it is about to be used. That keeps the entry point to a single line a
+# person can be handed without anything to paste onto the end of it, and it puts
+# the question in front of somebody whose machine is by then built. Enter there
+# answers nothing and the run stops at the machine, which ends well.
 #
 # Somebody who has never opened a terminal has a chain to cross before prep can
 # run at all: a package manager, git, bun, Node, gh, a GitHub login, a git
@@ -51,15 +54,14 @@ PREP_DIR="${PREP_DIR:-$HOME/.prep-cli}"
 SCRIPT_URL="${SCRIPT_URL:-https://raw.githubusercontent.com/Inkflockteam/prep-cli/main/scripts/bootstrap.sh}"
 
 # The repository a new person starts working in. Cloned in step 11 and handed to
-# `prep setup` in step 12. It arrives as the first argument, which is what keeps
-# the entry point one line a person can be handed (docs/adr/0009):
+# `prep setup` in step 12. Step 11 is where it is asked for, so the entry point
+# stays one line a person can be handed (docs/adr/0009).
 #
-#   curl -fsSL <this script> | bash -s -- <git url>
-#
-# The environment variable stays as the way to set it without an argument, and
-# the argument wins when both are given.
-PREPARED_REPO="${1:-${PREPARED_REPO:-}}"
-PROJECT_DIR="${2:-${PROJECT_DIR:-}}"
+# The environment variables are how a run answers ahead of the question: a fork,
+# a test VM or a second project sets either one and step 11 does not ask
+# (docs/adr/0015).
+PREPARED_REPO="${PREPARED_REPO:-}"
+PROJECT_DIR="${PROJECT_DIR:-}"
 
 # The vendor's native installer. One command covers macOS, Linux and WSL, it
 # wants neither sudo nor a package manager, and it auto-updates (docs/adr/0013).
@@ -151,6 +153,19 @@ ask_default() {
   IFS= read -r ANSWER </dev/tty ||
     fail "The terminal closed before that question was answered."
   [ -n "$ANSWER" ] || ANSWER="$default"
+}
+
+# A question the run can carry on without an answer to. ask() loops until it has
+# one, which is right for everything it is asked and wrong for the project at
+# step 11: no project is an ending that script already has. Enter leaves ANSWER
+# empty and the caller reads that.
+#
+#   $1 the question, with its colon
+ask_optional() {
+  ANSWER=""
+  printf '%s' "$1" >/dev/tty
+  IFS= read -r ANSWER </dev/tty ||
+    fail "The terminal closed before that question was answered."
 }
 
 # Node and gh arrive on Linux the same way: a vendor tarball, a checksum file
@@ -670,6 +685,18 @@ step "11/12 project"
 # how to come back for the project, and ends well.
 PROJECT_READY=1
 
+# The question is asked here rather than at the top of the run, because here is
+# where the answer is used and here is where going unanswered still ends well.
+# Two runs are never asked: one that was given the repository in the environment
+# has already answered, and one with no terminal has nobody to answer. Both take
+# the machine-only ending below, the same one Enter takes.
+if [ -z "$PREPARED_REPO" ] && have_tty; then
+  echo "The machine is built. One thing is left to name: the repository you came"
+  echo "here to work in. Press Enter to skip it and stop at the machine."
+  ask_optional "The git url of the repository you are working in: "
+  PREPARED_REPO="$ANSWER"
+fi
+
 if [ -z "$PREPARED_REPO" ]; then
   PROJECT_READY=0
   echo "No project repository was named, so this run stops at the machine."
@@ -727,9 +754,9 @@ else
   # already installed is skipped on that second run.
   printf 'This machine is ready. No project was named, so nothing was cloned\n'
   printf 'and nothing was set up.\n'
-  printf '\nWhen you have the repository you are working in, run this again\n'
-  printf 'with it — the steps above are all skipped:\n'
-  printf '  curl -fsSL %s | bash -s -- <git url>\n' "$SCRIPT_URL"
+  printf '\nWhen you have the repository you are working in, run this again and\n'
+  printf 'name it at step 11 — the steps above are all skipped:\n'
+  printf '  curl -fsSL %s | bash\n' "$SCRIPT_URL"
 fi
 
 if [ -n "$FAILED_GAPS" ]; then
