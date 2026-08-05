@@ -12,6 +12,10 @@ git worktree add .claude/worktrees/<name> -b <branch> main
 cd .claude/worktrees/<name> && bun install --frozen-lockfile
 ```
 
+Run the first line from the repository root. The path is relative, so the same
+line typed inside a worktree puts one worktree inside another, and the inner one
+goes when the outer is removed.
+
 ## Records
 
 `docs/adr/` is for a decision that would otherwise be re-argued from scratch by
