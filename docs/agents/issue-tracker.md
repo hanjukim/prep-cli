@@ -162,17 +162,23 @@ title.
   whether a ticket stops matching once its blockers close. Don't build the
   frontier on it — read `blockedBy[].state` and decide locally, as below.
 
-- **Frontier query**: open tickets in the map's milestone, dropping any that
-  has an assignee and any that still has an open blocker.
+- **Frontier query**: open tickets in the map's milestone, dropping the map
+  itself, any that has an assignee, and any that still has an open blocker.
 
   ```sh
   gh issue list --milestone "<map title>" --state open --limit 100 \
-    --json number,title,assignees,blockedBy \
+    --json number,title,assignees,blockedBy,labels \
     --jq '[ .[]
+            | select([.labels[].name] | index("wayfinder:map") == null)
             | select(.assignees == [])
             | select([.blockedBy.nodes[] | select(.state == "OPEN")] == []) ]
           | sort_by(.number)'
   ```
+
+  The map carries its own milestone, so it comes back from that `gh issue list`
+  like everything else — open, unassigned, and blocked by nothing. Without the
+  label filter it is a frontier entry, and it is the one issue in the milestone
+  that is never work to pick up.
 
   That orders by issue number, which is map order as long as the children were
   opened in the order the map lists them. When the map's sub-issue list has
@@ -180,15 +186,21 @@ title.
 
   ```sh
   gh issue list --milestone "<map title>" --state open --limit 100 \
-    --json number,title,assignees,blockedBy \
+    --json number,title,assignees,blockedBy,labels \
     | jq --argjson order \
         "$(gh issue view <map> --json subIssues \
              --jq '[.subIssues.nodes[].number]')" '
         [ .[]
+          | select([.labels[].name] | index("wayfinder:map") == null)
           | select(.assignees == [])
           | select([.blockedBy.nodes[] | select(.state == "OPEN")] == []) ]
         | sort_by(.number as $n | $order | index($n))'
   ```
+
+  The filter matters more in this second form than in the first. A map is not
+  its own sub-issue, so `$order` does not carry its number, `index` answers
+  `null` for it, and jq sorts `null` ahead of every number — an unfiltered map
+  does not merely appear in the frontier, it takes first place.
 
   First entry wins.
 
