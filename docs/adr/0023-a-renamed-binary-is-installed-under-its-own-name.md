@@ -1,11 +1,16 @@
 # ADR-0023: A tool the distribution renames is installed under its own name
 
 **Date:** 2026-08-05
-**Status:** Accepted. It narrows no record before it. The per-platform `binary`
-override it replaces was in the registry from the first table and was never
-argued in a record of its own, and ADR-0009's third decision — that the tool
-list lives in the registry and the script executes what prep names — holds here
-unchanged, which is what decision 6 below restates.
+**Status:** Accepted, and narrowed by ADR-0025 in decisions 3 and 5: the link
+that puts the canonical name on PATH moved out of the install command and into
+one step of the bootstrap script, and `renamedOnDebian` went with it. Everything
+else here holds — the check asks for the canonical name, `renamed` records what
+the platform ships, the name lands in `~/.local/bin`, and prep creates neither
+the package nor the name. It narrows no record before it. The per-platform
+`binary` override it replaces was in the registry from the first table and was
+never argued in a record of its own, and ADR-0009's third decision — that the
+tool list lives in the registry and the script executes what prep names — holds
+here unchanged, which is what decision 6 below restates.
 **Sources:** `https://github.com/hanjukim/prep-cli/issues/3`; ADR-0002,
 ADR-0009, ADR-0010, ADR-0013, ADR-0017, ADR-0022; `CONTEXT.md` under **check
 result**, **gap** and **guidance**; Debian's `bat` and `fd-find` packages,

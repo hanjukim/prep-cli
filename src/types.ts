@@ -27,11 +27,12 @@ export type PlatformSpec = {
    * It does not change what is looked up. The canonical name is what counts —
    * it is what anybody types and what every alias and script names — so a
    * machine holding batcat and no bat is a gap like any other, and the guidance
-   * beside this is what closes it: one command that installs the package and
-   * puts the canonical name on PATH.
+   * beside this installs the package and says nothing about a name.
    *
-   * Recording it here rather than in the command alone is what keeps the two
-   * entries one table and not two special cases.
+   * What turns the two names into a name that answers is one step of the
+   * bootstrap script, over every renamed tool at once (docs/adr/0025). This is
+   * the fact that step reads, which is why it is carried out to `--json` rather
+   * than spent inside a command.
    */
   renamed?: string;
   guidance: Guidance;
@@ -108,6 +109,16 @@ export type CheckResult = {
   binary: string | null;
   /** Where it was found. null when it was not. */
   path: string | null;
+  /**
+   * The name this platform's package ships the executable under, when that is
+   * not `binary`. null everywhere else, which is almost everywhere.
+   *
+   * Carried through so a reader outside prep can pair the name a machine owes
+   * with the one it actually holds, without a table of the two names of its own
+   * (docs/adr/0025). It says nothing about `status`: the canonical name is what
+   * was asked for, and what was asked for is what the status answers.
+   */
+  renamed: string | null;
   guidance: Guidance | null;
 };
 

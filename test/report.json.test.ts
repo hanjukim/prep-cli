@@ -56,12 +56,7 @@ const FIXTURE: readonly ToolSpec[] = [
       darwin: { guidance: { kind: "command", command: "brew install fd" } },
       linux: {
         renamed: "fdfind",
-        guidance: {
-          kind: "command",
-          command:
-            'sudo apt install fd-find && fdfind="$(command -v fdfind)" && ' +
-            'mkdir -p ~/.local/bin && ln -sf "$fdfind" ~/.local/bin/fd',
-        },
+        guidance: { kind: "command", command: "sudo apt install fd-find" },
       },
     },
   },
@@ -100,10 +95,17 @@ describe("the JSON contract", () => {
     expect(payload.results.map((result) => result.id)).toEqual(["homebrew", "apt", "git", "fd"]);
   });
 
-  test("an entry has the five keys id, status, binary, path, guidance, in a fixed order", () => {
+  test("an entry has the six keys id, status, binary, path, renamed, guidance, in a fixed order", () => {
     const payload = parse("darwin", { git: "/usr/bin/git" }) as { results: object[] };
     for (const result of payload.results) {
-      expect(Object.keys(result)).toEqual(["id", "status", "binary", "path", "guidance"]);
+      expect(Object.keys(result)).toEqual([
+        "id",
+        "status",
+        "binary",
+        "path",
+        "renamed",
+        "guidance",
+      ]);
     }
   });
 
@@ -118,9 +120,16 @@ describe("the JSON contract", () => {
     expect(fd).toMatchObject({ status: "missing", binary: "fd", path: null });
   });
 
-  test("a not-applicable entry has binary, path, and guidance all null", () => {
+  test("a not-applicable entry has binary, path, renamed, and guidance all null", () => {
     const payload = parse("darwin", {}) as {
-      results: { id: string; status: string; binary: null; path: null; guidance: null }[];
+      results: {
+        id: string;
+        status: string;
+        binary: null;
+        path: null;
+        renamed: null;
+        guidance: null;
+      }[];
     };
     const apt = payload.results.find((result) => result.id === "apt");
     expect(apt).toEqual({
@@ -128,6 +137,7 @@ describe("the JSON contract", () => {
       status: "unsupported",
       binary: null,
       path: null,
+      renamed: null,
       guidance: null,
     });
   });
@@ -143,6 +153,17 @@ describe("the JSON contract", () => {
     expect(fd?.binary).toBe("fd");
     expect(fd?.status).toBe("missing");
     expect(fd?.path).toBeNull();
+  });
+
+  // The shipped name is what a reader outside prep pairs the canonical one with,
+  // so it is carried out rather than spent inside a command (docs/adr/0025).
+  test("the shipped name rides along on the platform that renames, and nowhere else", () => {
+    const linux = parse("linux", {}) as { results: { id: string; renamed: string | null }[] };
+    expect(linux.results.find((result) => result.id === "fd")?.renamed).toBe("fdfind");
+    expect(linux.results.find((result) => result.id === "git")?.renamed).toBeNull();
+
+    const darwin = parse("darwin", {}) as { results: { id: string; renamed: string | null }[] };
+    expect(darwin.results.find((result) => result.id === "fd")?.renamed).toBeNull();
   });
 
   test("the canonical name found is where the path comes from", () => {

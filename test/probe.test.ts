@@ -54,6 +54,7 @@ describe("check", () => {
       status: "installed",
       binary: "rg",
       path: "/opt/homebrew/bin/rg",
+      renamed: null,
       guidance: { kind: "command", command: "brew install ripgrep" },
     });
   });
@@ -73,6 +74,7 @@ describe("check", () => {
       status: "unsupported",
       binary: null,
       path: null,
+      renamed: null,
       guidance: null,
     });
   });
@@ -161,7 +163,7 @@ describe("lookup names in the real registry", () => {
     expect(result.path).toBeNull();
   });
 
-  test("the canonical name and the found path land in the result", () => {
+  test("the canonical name, the found path and the shipped name land in the result", () => {
     const fd = all().find((s) => s.id === "fd")!;
     const result = check(fd, "linux", fakeWhich({ fd: "/home/me/.local/bin/fd" }));
     expect(result).toEqual({
@@ -169,11 +171,10 @@ describe("lookup names in the real registry", () => {
       status: "installed",
       binary: "fd",
       path: "/home/me/.local/bin/fd",
+      renamed: "fdfind",
       guidance: {
         kind: "command",
-        command:
-          'sudo apt install -y fd-find && fdfind="$(command -v fdfind)" && ' +
-          'mkdir -p ~/.local/bin && ln -sf "$fdfind" ~/.local/bin/fd',
+        command: "sudo apt install -y fd-find",
       },
     });
   });

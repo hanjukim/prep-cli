@@ -215,7 +215,6 @@ describe("per-platform guidance", () => {
     });
     expect(result.stdout).not.toContain("✓ fd");
     expect(result.stdout).toContain("sudo apt install -y fd-find");
-    expect(result.stdout).toContain('ln -sf "$fdfind" ~/.local/bin/fd');
   });
 
   test("on Linux, fd on PATH is the whole of what fd needs", () => {

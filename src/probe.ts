@@ -16,7 +16,14 @@ export function check(spec: ToolSpec, platform: Platform, which: WhichFn = bunWh
 
   // We do not know what to look up on this platform. Do not invent a substitute.
   if (!platformSpec) {
-    return { id: spec.id, status: "unsupported", binary: null, path: null, guidance: null };
+    return {
+      id: spec.id,
+      status: "unsupported",
+      binary: null,
+      path: null,
+      renamed: null,
+      guidance: null,
+    };
   }
 
   // The canonical name, on every platform. A distribution that ships the tool
@@ -26,11 +33,16 @@ export function check(spec: ToolSpec, platform: Platform, which: WhichFn = bunWh
   const binary = spec.binary;
   const path = which(binary);
 
+  // Read out of the table rather than looked up. What the shipped name resolves
+  // to is asked where the link is made, on a machine the installs have already
+  // run over (docs/adr/0025), and a second lookup here would answer for the
+  // machine as it stood before them.
   return {
     id: spec.id,
     status: path === null ? "missing" : "installed",
     binary,
     path,
+    renamed: platformSpec.renamed ?? null,
     guidance: platformSpec.guidance,
   };
 }

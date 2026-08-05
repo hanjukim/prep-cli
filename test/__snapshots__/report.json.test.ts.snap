@@ -9,6 +9,7 @@ exports[`JSON report snapshots macOS · installed, gaps, and not applicable mixe
       "status": "installed",
       "binary": "brew",
       "path": "/opt/homebrew/bin/brew",
+      "renamed": null,
       "guidance": {
         "kind": "manual",
         "note": "Follow the official install script",
@@ -20,6 +21,7 @@ exports[`JSON report snapshots macOS · installed, gaps, and not applicable mixe
       "status": "unsupported",
       "binary": null,
       "path": null,
+      "renamed": null,
       "guidance": null
     },
     {
@@ -27,6 +29,7 @@ exports[`JSON report snapshots macOS · installed, gaps, and not applicable mixe
       "status": "installed",
       "binary": "git",
       "path": "/usr/bin/git",
+      "renamed": null,
       "guidance": {
         "kind": "command",
         "command": "brew install git"
@@ -37,6 +40,7 @@ exports[`JSON report snapshots macOS · installed, gaps, and not applicable mixe
       "status": "missing",
       "binary": "fd",
       "path": null,
+      "renamed": null,
       "guidance": {
         "kind": "command",
         "command": "brew install fd"
@@ -56,6 +60,7 @@ exports[`JSON report snapshots Linux · including a binary the distribution rena
       "status": "unsupported",
       "binary": null,
       "path": null,
+      "renamed": null,
       "guidance": null
     },
     {
@@ -63,6 +68,7 @@ exports[`JSON report snapshots Linux · including a binary the distribution rena
       "status": "installed",
       "binary": "apt",
       "path": "/usr/bin/apt",
+      "renamed": null,
       "guidance": {
         "kind": "manual",
         "note": "Check your distro's package manager yourself"
@@ -73,6 +79,7 @@ exports[`JSON report snapshots Linux · including a binary the distribution rena
       "status": "missing",
       "binary": "git",
       "path": null,
+      "renamed": null,
       "guidance": {
         "kind": "command",
         "command": "sudo apt install git"
@@ -83,9 +90,10 @@ exports[`JSON report snapshots Linux · including a binary the distribution rena
       "status": "missing",
       "binary": "fd",
       "path": null,
+      "renamed": "fdfind",
       "guidance": {
         "kind": "command",
-        "command": "sudo apt install fd-find && fdfind=\\"$(command -v fdfind)\\" && mkdir -p ~/.local/bin && ln -sf \\"$fdfind\\" ~/.local/bin/fd"
+        "command": "sudo apt install fd-find"
       }
     }
   ]
