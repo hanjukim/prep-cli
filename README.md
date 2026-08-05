@@ -26,7 +26,7 @@ bun, Node, gh, a GitHub login, a git identity, Claude Code, and prep itself — 
 a shell script takes that place:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Inkflockteam/prep-cli/main/scripts/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hanjukim/prep-cli/main/scripts/bootstrap.sh | bash
 ```
 
 Nothing goes after that line. The script opens the chain, closes what
@@ -36,11 +36,6 @@ runs `prep setup` in it. Press Enter instead and the run stops at a machine that
 is ready, and tells you how to come back for the project. It stops in front of
 the GitHub login too, because a browser login cannot be performed on somebody's
 behalf, and running it again picks up where it stopped.
-
-**That URL is private today.** Both the script and the clone behind it sit in a
-repository an unauthenticated request cannot see, and GitHub answers such a
-request with 404 rather than a refusal. The line works for an account that has
-been invited, and for nobody else (`docs/adr/0017`, `docs/adr/0018`).
 
 On a machine that already has bun, prep runs straight from a clone:
 

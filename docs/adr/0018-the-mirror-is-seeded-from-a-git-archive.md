@@ -5,8 +5,9 @@
 and takes over the question ADR-0017 left to the migration ticket. The seed ran
 on 2026-08-05, and ADR-0019 takes it from there: the archive is what put the
 tree on GitHub once, not how a change travels afterwards. Everything below holds
-for that one act, and the fifth decision — who may read the repository — is
-still undecided.
+for that one act. The fifth decision — who may read the repository — is settled
+by ADR-0020: anybody, at `hanjukim/prep-cli`, on a scan of the tree recorded
+there with its limits, as this record asked.
 **Sources:** #65, #66, #67 on the self-hosted instance; the pre-publication scan
 of 2026-08-02, whose record this change deletes from the tree and leaves in this
 repository's history; ADR-0015, ADR-0017

@@ -8,10 +8,11 @@ chain goes on to clone is private. Node and gh are links ahead of it now, and a
 GitHub login is a stop ahead of it — the script delivers the person to that
 login and waits to be run again. The one question this record left to the
 migration ticket — whether the mirror becomes public — was taken over by
-ADR-0018 when that ticket closed without settling it, and it is undecided still
-(ADR-0019). What that repository is called changed with ADR-0019, and what it
-holds did not: the clones are private, so the reasoning here is untouched.
-Everything else stands.
+ADR-0018 when that ticket closed without settling it, and ADR-0020 answers it:
+the repository is public and lives at `hanjukim/prep-cli`. One of the two clones
+this record calls private therefore is not, and gh remains a link for the other
+— the project somebody names in step 11. Whether the login still belongs at
+step 6 is the question ADR-0020 leaves open. Everything else stands.
 **Sources:** ADR-0009, ADR-0011, ADR-0013, ADR-0015,
 `https://claude.ai/install.sh`, `https://nodejs.org/dist/index.json`,
 `https://github.com/cli/cli/releases`, a bare-Linux simulation run on 2026-08-01,

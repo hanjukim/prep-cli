@@ -2,7 +2,7 @@
 #
 # The first thing a person runs (docs/adr/0009).
 #
-#   curl -fsSL https://raw.githubusercontent.com/Inkflockteam/prep-cli/main/scripts/bootstrap.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/hanjukim/prep-cli/main/scripts/bootstrap.sh | bash
 #
 # The line takes nothing after it. The repository the person came here to work
 # in is the one thing this script cannot know, so step 11 asks for it rather
@@ -27,11 +27,16 @@
 #     installs it.
 #   - Node is a link, because the vendor's installer lays down a `claude` that
 #     will not start without one and never mentions it.
-#   - gh and its login are links, because both clones ahead of them are of
-#     repositories that an unauthenticated request cannot see at all. The login
-#     itself is a person's step, not this script's: carrying a dependency and
-#     performing an authentication are different things, and a browser login
-#     cannot be carried. The script stops in front of it and hands it over.
+#   - gh and its login are links, because the repository step 11 clones is
+#     somebody's own and may be one an unauthenticated request cannot see at
+#     all, which GitHub answers with 404 rather than a refusal. prep's own clone
+#     stopped being such a repository when this one was published
+#     (docs/adr/0020), so a run that clones no project now carries a login it
+#     does not need; where that login belongs in the chain is left open there.
+#     The login itself is a person's step, not this script's: carrying a
+#     dependency and performing an authentication are different things, and a
+#     browser login cannot be carried. The script stops in front of it and hands
+#     it over.
 #
 # Running it twice is safe, and stopping is cheap for the same reason. Every
 # install is guarded by whether the binary is already here, every clone by
@@ -42,15 +47,15 @@ set -Eeuo pipefail
 
 # Where prep itself is cloned from and kept. This is the repository the project
 # is developed in (docs/adr/0019); the instance it was built on first is
-# reachable inside one network only, and never by whoever runs this script. The
-# clone here is private today, which is why the login in step 6 comes before it
-# (docs/adr/0017).
-PREP_REPO="${PREP_REPO:-https://github.com/Inkflockteam/prep-cli.git}"
+# reachable inside one network only, and never by whoever runs this script. It
+# is public (docs/adr/0020), so this clone asks nothing of the login in step 6 —
+# the project clone in step 11 is what still may.
+PREP_REPO="${PREP_REPO:-https://github.com/hanjukim/prep-cli.git}"
 PREP_DIR="${PREP_DIR:-$HOME/.prep-cli}"
 
 # Where this script is served from. It is quoted back to the person whenever
 # they have to run it again, so the line they are given is the line that works.
-SCRIPT_URL="${SCRIPT_URL:-https://raw.githubusercontent.com/Inkflockteam/prep-cli/main/scripts/bootstrap.sh}"
+SCRIPT_URL="${SCRIPT_URL:-https://raw.githubusercontent.com/hanjukim/prep-cli/main/scripts/bootstrap.sh}"
 
 # The repository a new person starts working in. Cloned in step 11 and handed to
 # `prep setup` in step 12. Step 11 is where it is asked for, so the entry point

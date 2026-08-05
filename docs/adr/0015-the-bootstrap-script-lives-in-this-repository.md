@@ -4,8 +4,10 @@
 **Status:** Accepted — settles what ADR-0009 left open. Decision 2's "public"
 has not held, and how the mirror is filled is settled by ADR-0018. ADR-0019 then
 makes that repository the home rather than a mirror, so "here" in this record's
-title is the repository the script now ships from. The URL, the branch, and
-everything else here stand.
+title is the repository the script now ships from. Decision 2's "public" is true
+as of ADR-0020, which also moves the repository to `hanjukim/prep-cli` — so the
+URL in decision 2 is superseded and the branch, and everything else here,
+stand.
 **Sources:** ADR-0009, ADR-0013
 
 ## Context

@@ -3,8 +3,9 @@
 **Date:** 2026-08-05
 **Status:** Accepted — takes over from ADR-0018 what happens after the seed. The
 archive is what put the tree there once; it is not how a change travels from now
-on. ADR-0015's URL and branch stand, and so does everything ADR-0017 says about
-a private clone.
+on. ADR-0015's branch stands. Which GitHub repository is the home, and the sixth
+decision's "still not decided", are both answered by ADR-0020: it is public and
+it is `hanjukim/prep-cli`.
 **Sources:** ADR-0015, ADR-0017, ADR-0018; the seed of 2026-08-05
 
 ## Context

@@ -339,10 +339,14 @@ from the vendor's native installer and not from the registry. Node is a link
 because that installer lays down a `claude` that will not start without one and
 never mentions it — the tarball nodejs.org publishes, pinned and checksummed,
 unpacked into `~/.local` rather than a version manager or a distribution
-package. gh is a link because both repositories the chain clones are private,
-and an unauthenticated request for a private repository comes back 404 rather
-than forbidden, so a clone without a login fails while describing the wrong
-problem. Codex is not in the chain — doctor names it as a gap and a person
+package. gh is a link because the project the chain clones last is somebody
+else's to choose and may be private, and an unauthenticated request for a
+private repository comes back 404 rather than forbidden, so a clone without a
+login fails while describing the wrong problem. prep's own repository was such a
+repository until it was published (docs/adr/0020); what that leaves behind is a
+login standing ahead of a clone that no longer needs it, on the one path — a
+machine and no project — where nothing else asks for an account. Codex is not in
+the chain — doctor names it as a gap and a person
 installs it. So the harness install command lives in two places: the script
 holds the one that opens the chain, the registry holds the advice the report
 prints.
@@ -382,19 +386,24 @@ question again.
 clone the script asks `gh repo view`, an authenticated question, and a failure
 is reported as a missing invitation naming the account that was logged in. An
 anonymous probe would have been worse than nothing: against a private repository
-it fails for everybody, including the people it was about to work for.
+it fails for everybody, including the people it was about to work for. The probe
+ahead of prep's own clone now asks about a public repository and answers yes for
+everybody, and it is kept because what it guards against is a repository that
+moved or was renamed, which no visibility settles.
 
 The script is `scripts/bootstrap.sh` here, served from the GitHub repository the
 one-liner names (docs/adr/0015). It sits beside the contract it reads, so a
 change to `--json` and the change to its consumer are one commit.
 `scripts/gaps.ts` is what reads that report — the script's own logic rather than
 prep's, run under the bun the chain has just installed, which is what keeps `jq`
-out of the chain. ADR-0015 calls that repository public and it is private today,
-so the `curl` one-liner does not fetch for an anonymous reader either
-(docs/adr/0017). Its first commit is a `git archive` of the tree as it stood on
-the self-hosted instance the project was built on, so it carries no history from
-there (docs/adr/0018) — and it is the home now rather than a mirror, so a change
-travels by being pushed to it (docs/adr/0019).
+out of the chain. That repository is `github.com/hanjukim/prep-cli`, and it is
+public, which is what makes the one-liner a line anybody can be handed: a `curl`
+against a private repository comes back 404 for every reader, invited or not, so
+the entry point did not work at all until this was settled (docs/adr/0020). Its
+first commit is a `git archive` of the tree as it stood on the self-hosted
+instance the project was built on, so it carries no history from there
+(docs/adr/0018) — and it is the home rather than a mirror, so a change travels
+by being pushed to it (docs/adr/0019).
 
 **PATH is amended as the chain is built, and written down for the shells that
 come after.** Every installer leaves its binary in a directory a fresh shell does
