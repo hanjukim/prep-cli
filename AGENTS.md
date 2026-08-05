@@ -46,4 +46,4 @@ Issues live in this repo's GitHub repository, managed with the `gh` CLI (docs/ad
 
 ### Domain docs
 
-Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+Two contexts: `CONTEXT-MAP.md` at the repo root names them and points at a glossary for each — `CONTEXT.md` for prep, `scripts/CONTEXT.md` for the bootstrap script. `docs/adr/` at the root holds the records for both. See `docs/agents/domain.md`.

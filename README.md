@@ -91,8 +91,10 @@ planned, merged, declined, or skipped.
 
 ## Where the reasoning lives
 
+- **`CONTEXT-MAP.md`** — which glossary to read. There are two programs here.
 - **`CONTEXT.md`** — the domain language. One entry per term prep is built out
-  of, with the argument attached.
+  of, with the argument attached. The bootstrap script's own terms are in
+  `scripts/CONTEXT.md`.
 - **`docs/adr/`** — one record per decision, in the order they were made.
 - **`AGENTS.md`** — what an agent working in this repository reads first.
 - **`CONTRIBUTING.md`** — how to run the checks, how the two documents above are
