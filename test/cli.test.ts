@@ -777,7 +777,7 @@ describe("a run with several files", () => {
       handoff: [],
       next: [],
     };
-    return { ...base, next: nextSteps(base, false) };
+    return { ...base, next: nextSteps(base) };
   }
 
   /** A person who answers each question in turn, so one file can be taken and the next refused. */

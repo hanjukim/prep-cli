@@ -134,7 +134,7 @@ function outcome(
     handoff,
     next: [],
   };
-  return { ...base, next: nextSteps({ ...base, harnesses: presenceFor(which) }, false) };
+  return { ...base, next: nextSteps({ ...base, harnesses: presenceFor(which) }) };
 }
 
 const APPLIED = outcome("applied", ["node"], ["Bash(npm:*)", "Bash(node:*)"]);
@@ -165,7 +165,7 @@ function merging(plan: MergePlan, status: ArtifactStatus = "planned"): SetupOutc
     handoff: UNTOUCHED,
     next: [],
   };
-  return { ...base, next: nextSteps(base, false) };
+  return { ...base, next: nextSteps(base) };
 }
 
 function human(input: SetupOutcome): string {
@@ -359,7 +359,10 @@ describe("the JSON report", () => {
       harnesses: BOTH_PRESENT,
       plugins: [],
       handoff: UNTOUCHED,
-      next: [{ id: "harness", command: CLAUDE_COMMAND, alternative: CODEX_COMMAND }],
+      next: [
+        { id: "harness", command: CLAUDE_COMMAND, alternative: CODEX_COMMAND },
+        { id: "doctor", command: "prep doctor", alternative: null },
+      ],
     });
   });
 
@@ -463,7 +466,7 @@ describe("the guidance file", () => {
       handoff,
       next: [],
     };
-    return { ...base, next: nextSteps(base, false) };
+    return { ...base, next: nextSteps(base) };
   }
 
   test("written", () => {
@@ -692,7 +695,7 @@ describe("turning an installed plugin on", () => {
       handoff: UNTOUCHED,
       next: [],
     };
-    return { ...base, next: nextSteps(base, false) };
+    return { ...base, next: nextSteps(base) };
   }
 
   test("written into a fresh file", () => {
@@ -765,13 +768,13 @@ describe("what to run next", () => {
   test("each command is shown with why it is worth running", () => {
     const text = human(APPLIED);
     expect(text).toContain(`${CLAUDE_COMMAND}  writes the guidance prep does not`);
-    expect(text).toContain("prep doctor                         checks this machine");
+    expect(text).toContain("prep doctor                         reports what this machine");
   });
 
-  test("a run with nothing left to do shows no block at all", () => {
+  test("a run with nothing project-side to do still shows the machine step", () => {
     const settled = outcome("skipped", ["node"], null, null, SETTLED);
-    expect(settled.next).toEqual([]);
-    expect(human(settled)).not.toContain("Next (");
+    expect(settled.next.map((step) => step.id)).toEqual(["doctor"]);
+    expect(human(settled)).toContain("Next (1)");
   });
 
   test("the owed line no longer carries the command — the block does", () => {
@@ -862,7 +865,7 @@ describe("the Codex permission file", () => {
       handoff: UNTOUCHED,
       next: [],
     };
-    return { ...base, next: nextSteps(base, false) };
+    return { ...base, next: nextSteps(base) };
   }
 
   test("written", () => {
@@ -936,7 +939,7 @@ describe("the file that points Claude Code at the guidance", () => {
       handoff: UNTOUCHED,
       next: [],
     };
-    return { ...base, next: nextSteps(base, false) };
+    return { ...base, next: nextSteps(base) };
   }
 
   test("written", () => {
@@ -979,7 +982,7 @@ describe("which harness the run wrote for", () => {
       handoff: UNTOUCHED,
       next: [],
     };
-    return { ...base, next: nextSteps(base, false) };
+    return { ...base, next: nextSteps(base) };
   }
 
   const CLAUDE_ONLY: HarnessPresence[] = [

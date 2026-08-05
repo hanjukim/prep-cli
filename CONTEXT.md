@@ -247,14 +247,16 @@ A command worth running once the report is over, read off what the run did. Four
 of them: **approve**, where a merge was planned and nobody was there to approve
 it; **harness**, where the handoff is still owed and a harness is here to be
 asked; **install-harness**, where the same is owed and nothing on this machine
-can be asked; **doctor**, where the project is now set up and the machine is the
-next scope out. Each is the level of intervention doctor holds to — a verified
-command, shown, run by a person. prep runs none of them.
+can be asked; **doctor**, the machine as the next scope out. Each is the level
+of intervention doctor holds to — a verified command, shown, run by a person.
+prep runs none of them.
 
 The order is fixed: what this run started and left unfinished comes first, and
 the wider scope comes last. `approve` is `prep setup <path>`, at a terminal this
-time. `doctor` is offered only to somebody who has just settled a project, so it
-stays out of a dry run.
+time. `doctor` closes every run that reaches the end, a dry run included: what
+the machine still owes a person does not depend on whether this run wrote a
+file, and a dry run is exactly the run somebody uses to look before touching
+anything.
 
 The harness command is chosen by reading the machine. Every harness in the
 registry carries one handoff command, and prep offers only the ones this machine
@@ -269,10 +271,12 @@ to avoid.
 
 Reading the machine settles which command to print and nothing else. Whichever
 harness is installed, the exit code is unchanged: it comes from the artifact
-list alone. Where there is nothing to offer, the section is not printed — a
-footer that says the same three things every time stops being read after the
-second run. After an approval the steps are computed again, since a merge that
-has just been approved is nothing to go back and approve.
+list alone. The project-side steps appear only when the outcome asked for them,
+so their presence means something — the doctor step alone is unconditional, and
+it is never printed twice: a run sent to `prep doctor` for a missing harness is
+not sent there again under a second reason. After an approval the steps are
+computed again, since a merge that has just been approved is nothing to go back
+and approve.
 _Avoid_: guidance, hint, suggestion
 
 **check result**:

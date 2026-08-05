@@ -365,5 +365,5 @@ export function setup(input: SetupInput): SetupOutcome {
   const handoff = readHandoff(root, fs);
   const outcome = { root, detected, artifacts, harnesses: presence, plugins, handoff, next: [] };
 
-  return { ...outcome, next: nextSteps(outcome, dryRun) };
+  return { ...outcome, next: nextSteps(outcome) };
 }

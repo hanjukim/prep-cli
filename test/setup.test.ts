@@ -425,6 +425,21 @@ describe("dry run", () => {
     expect(allow.some((rule) => rule.includes("npm"))).toBe(false);
     expect(written.size).toBe(0);
   });
+
+  test("still points at the machine — what is owed is true before anything is written", () => {
+    const { fs } = fakeFs([PACKAGE_JSON]);
+    const outcome = setup({ root: ROOT, dryRun: true, fs });
+    expect(outcome.next.map((step) => step.id)).toContain("doctor");
+  });
+});
+
+describe("the machine pointer", () => {
+  test("a second run over an unchanged project still names it", () => {
+    const { fs } = fakeFs([PACKAGE_JSON]);
+    setup({ root: ROOT, fs });
+    const second = setup({ root: ROOT, fs });
+    expect(second.next.map((step) => step.id)).toContain("doctor");
+  });
 });
 
 describe("errors", () => {
