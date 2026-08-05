@@ -3,7 +3,8 @@
 **Date:** 2026-08-06
 **Status:** Accepted — extends ADR-0013's PATH decision and ADR-0017, which put
 `~/.local/bin` into every shell rc and left the shell running the script to a
-sentence at the very end. Found by a real run on WSL with Ubuntu.
+sentence at the very end. Found by a real run on WSL with Ubuntu, and confirmed
+by another on the same machine.
 **Sources:** ADR-0009, ADR-0013, ADR-0017, ADR-0021, ADR-0022; a real
 `curl … | bash` run on WSL that stopped at step 9; `https://bun.sh/install`
 
@@ -183,13 +184,15 @@ three stood, and emitted one POSIX block. Three shells fall through that:
 - The tests read the written rc back with the shell it was written for, so zsh
   and dash are checked by their own interpreters rather than by a string match.
 
-## Unverified
+## Verified
 
-**The fix has not been through a real WSL run.** The messages were rendered and
-read, the functions are tested against a HOME of their own, and the rc that bun
-writes was reproduced from its published installer rather than observed on the
-machine that failed. A run on WSL with Ubuntu, stopping at step 9 and carrying
-on from that terminal, is the acceptance test.
+**A real run on the WSL machine that found this.** It is the acceptance test
+this record was written against: the same machine, the same Ubuntu, the terminal
+that ran the one-liner. The file was there, the line hands that terminal what
+the run installed, and the announcement was found rather than scrolled past.
+That closes what the earlier version of this record left open.
+
+## Unverified
 
 **fish was run, in a container rather than on a machine that has it.** No fish
 is installed where this was written, so the two tests that read a fish file back
