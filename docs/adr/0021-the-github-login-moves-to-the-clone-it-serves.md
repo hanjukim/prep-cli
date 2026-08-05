@@ -5,8 +5,9 @@
 question ADR-0020 left open. The chain rule that record states is untouched:
 the chain still carries what the destination needs at run time. What changes is
 where one link falls, now that one of the two clones behind it has gone away.
-**Sources:** ADR-0009, ADR-0013, ADR-0015, ADR-0017, ADR-0020, issue #2, and an
-observed refusal from `gh repo view` on a public repository with no login
+**Sources:** ADR-0009, ADR-0013, ADR-0015, ADR-0017, ADR-0020, issue #2, an
+observed refusal from `gh repo view` on a public repository with no login, and a
+real `curl … | bash` run on WSL on 2026-08-05
 
 ## Context
 
@@ -140,11 +141,30 @@ a machine and pressed Enter to get one.
   4, 5 and 6 are narrowed by decisions 1 to 3 above. Its rule — the chain carries
   what the destination needs at run time — is unchanged.
 
-## Unverified
+## Verified
 
-**No real run has been made on a fresh machine yet.** ADR-0017 settled its order
-with runs on Linux and on WSL, and issue #2 asks for the same standard: the
-acceptance test is a real run on a fresh machine that presses Enter at the
-project question and is never asked to log in. Until that run has happened, this
-record is a decision with the reasoning behind it and not a verified one, and
-issue #2 stays open.
+**A real run on WSL, on 2026-08-05, took the machine-only path end to end.** It
+reached the project question having never mentioned a GitHub account, pressed
+Enter there, and finished:
+
+```
+This machine is ready. No project was named, so nothing was cloned
+and nothing was set up.
+
+git has no name and email to commit under yet, and every commit
+needs both. Set them yourself:
+  git config --global user.name "Your Name"
+  git config --global user.email "you@example.com"
+```
+
+That is the acceptance test issue #2 asked for, and decision 4 in the second
+paragraph of it. The run also had to clear ADR-0022 first: the same machine held
+a Windows npm install of Claude Code, which the script took for its own until
+`have` learned to refuse one.
+
+**The native-Linux run was not repeated.** ADR-0017 gathered evidence on both
+because what it changed was how tools are installed, and installers differ by
+platform: apt against brew, a tarball against a formula. Nothing here touches an
+install. What moved is a question, a stop and a probe, all of them plain bash
+that WSL runs exactly as Linux does. One run is taken as enough for this change,
+and the omission is written down rather than passed over.

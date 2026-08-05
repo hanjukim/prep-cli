@@ -5,9 +5,11 @@
 `command -v` as the answer to whether a link is already here, and ADR-0017's
 seventh decision, which put the harness's plugins in the chain. Found by the
 first real run of the script as ADR-0021 left it, on WSL.
-**Sources:** ADR-0009, ADR-0013, ADR-0017, ADR-0021; a real
-`curl … | bash` run on WSL on 2026-08-05; `https://claude.ai/install.sh`;
-`anthropics/claude-plugins-official` at `.claude-plugin/marketplace.json`
+**Sources:** ADR-0009, ADR-0013, ADR-0017, ADR-0021; two real
+`curl … | bash` runs on WSL on 2026-08-05, the first of which stopped at the
+Claude Code step and the second of which ran to the end;
+`https://claude.ai/install.sh`; `anthropics/claude-plugins-official` at
+`.claude-plugin/marketplace.json`
 
 ## Context
 
