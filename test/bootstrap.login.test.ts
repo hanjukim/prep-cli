@@ -47,6 +47,22 @@ describe("the machine is built without an account", () => {
     expect(ending).toInclude("git config --global user.name");
     expect(ending).toInclude("git config --global user.email");
   });
+
+  // The run needed no account and the work after it does, so the ending is where
+  // the login is handed over — named, never run (docs/adr/0021).
+  test("the machine-only ending hands over the GitHub login", () => {
+    const ending = SCRIPT.slice(SCRIPT.indexOf("This machine is ready."));
+    expect(ending).toInclude('gh auth status >/dev/null 2>&1; then');
+    expect(ending).toInclude("auth login --git-protocol https --web");
+    expect(ending).toInclude("https://github.com/login/device");
+  });
+
+  test("the login is offered before the identity it would answer for", () => {
+    const ending = SCRIPT.slice(SCRIPT.indexOf("This machine is ready."));
+    expect(ending.indexOf("auth login --git-protocol https --web")).toBeLessThan(
+      ending.indexOf("git config --global user.name"),
+    );
+  });
 });
 
 describe("the project step is where the account is asked for", () => {
