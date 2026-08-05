@@ -44,12 +44,15 @@ function closing(options: { projectReady: boolean; gaps?: string }): string {
     ["claude_login_note", "closing_message"],
     [
       `PROJECT_READY=${options.projectReady ? 1 : 0}`,
-      `PROJECT_DIR=/home/somebody/a-project`,
+      "PROJECT_DIR=/home/somebody/a-project",
       `FAILED_GAPS=${JSON.stringify(options.gaps ?? "")}`,
       "closing_message",
     ].join("\n"),
   );
 }
+
+/** What claude_login_note prints, taken from the script rather than repeated here. */
+const note = (): string => run(["claude_login_note"], "claude_login_note");
 
 /** Everything the ending prints before it turns to reference. */
 const beforeReference = (ending: string): string => ending.split("==> For reference")[0] ?? "";
@@ -65,7 +68,7 @@ describe("the stop in front of the GitHub login", () => {
     ["fail", "claude_login_note", "require_github_login"],
     [
       'STEP="9/10 project"',
-      'GH_BIN=/home/somebody/.local/bin/gh',
+      "GH_BIN=/home/somebody/.local/bin/gh",
       "gh() { return 1; }",
       "require_github_login || true",
     ].join("\n"),
@@ -76,9 +79,8 @@ describe("the stop in front of the GitHub login", () => {
     expect(stopped).toInclude("https://github.com/login/device");
   });
 
-  test("names the Claude Code login in the same message", () => {
-    expect(stopped).toInclude("claude");
-    expect(stopped).toInclude("paid account");
+  test("names the Claude Code login in the same message, word for word", () => {
+    expect(stopped).toInclude(note());
   });
 
   test("says the machine keeps what it has, so the second run is cheap", () => {
@@ -96,7 +98,7 @@ describe("a run that set the project up", () => {
   });
 
   test("keeps the logins and the doctor command as reference", () => {
-    expect(reference(ending)).toInclude("paid account");
+    expect(reference(ending)).toInclude(note());
     expect(reference(ending)).toInclude("Codex");
     expect(reference(ending)).toInclude("prep doctor");
   });
@@ -146,7 +148,12 @@ describe("gaps that would not install", () => {
 });
 
 describe("the Claude Code login", () => {
-  test("is written once and printed from both places that hand it over", () => {
-    expect(SCRIPT.match(/claude_login_note/g)).toHaveLength(3);
+  // The two runs above each assert the note reaches them. This asserts the other
+  // half: that it is one wording rather than two that happen to agree today.
+  test("is written once, and both places call for it rather than repeating it", () => {
+    expect(shellFunction("claude_login_note")).toInclude("paid account");
+    expect(shellFunction("require_github_login")).toInclude("$(claude_login_note)");
+    expect(shellFunction("closing_message")).toInclude("\n  claude_login_note\n");
+    expect(SCRIPT.match(/paid account/g)).toHaveLength(1);
   });
 });

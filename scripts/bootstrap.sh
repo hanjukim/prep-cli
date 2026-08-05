@@ -332,13 +332,16 @@ Everything installed so far stays installed, and the script skips it."
   fi
 }
 
-# The Claude Code login, in the one wording every place that hands it over uses.
+# The Claude Code login, in one wording, printed from the two places that send
+# somebody to a browser.
 #
 # The first `claude` run authenticates through a browser, and no script can do
-# that for anybody. Two places hand work back to a person — the stop below and
-# the closing message — and each of them is the last thing somebody reads on its
-# own path, so each says this (docs/adr/0023). It used to be said in the closing
-# message alone, which the stop below never reaches.
+# that for anybody. Neither can the GitHub login below, and a person already at
+# a browser for one should be there for both, so the stop below says this as
+# well as the closing message (docs/adr/0023). It used to be said in the closing
+# message alone, which the stop below exits before reaching. The other stops the
+# script makes send nobody to a browser, and each of them reaches the closing
+# message on the run that follows it.
 claude_login_note() {
   cat <<'MESSAGE'
 Logging in to Claude Code is a browser step, and the first `claude` run is what
@@ -862,7 +865,7 @@ closing_message() {
     printf 'and nothing was set up.\n'
     printf '\n  Next: clone the repository you are working in and set it up. Open\n'
     printf '  a new terminal, so it carries the tools this script installed.\n\n'
-    printf '      git clone <git url> ~/my-project\n'
+    printf '      git clone "<git url>" ~/my-project\n'
     printf '      prep setup ~/my-project\n'
   fi
 

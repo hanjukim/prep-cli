@@ -1,13 +1,15 @@
 # ADR-0023: One next action, and the logins handed over together
 
 **Date:** 2026-08-05
-**Status:** Accepted — amends ADR-0021 decision 4 and the last paragraph of
-ADR-0013 decision 5. Both said the Claude Code login is named in the closing
-message and nowhere else; it is now named wherever the script hands work back to
-a person. Nothing about where the GitHub login falls is changed.
-**Sources:** ADR-0009, ADR-0013, ADR-0015, ADR-0017, ADR-0021, issue #5, and
-three real `bash scripts/bootstrap.sh` runs on fresh Debian machines on
-2026-08-05
+**Status:** Accepted — narrows ADR-0021 decision 4, which said the Claude Code
+login is named in the closing message and nowhere else, and takes the
+machine-only ending's `curl … | bash` line with it. ADR-0013 decision 5 is
+unchanged: it says the login is handed back, not where. ADR-0020 decision 3
+loses one of its two strings, since `SCRIPT_URL` is gone. Nothing about where
+the GitHub login falls is changed.
+**Sources:** ADR-0009, ADR-0013, ADR-0015, ADR-0017, ADR-0020, ADR-0021,
+issue #5, and three real `bash scripts/bootstrap.sh` runs on fresh Debian
+machines on 2026-08-05
 
 ## Context
 
@@ -39,9 +41,9 @@ thing to do. A person reads the first and stops.
 
 The machine-only ending had a fault of its own. It closed with the entry point's
 own one-liner, `curl … | bash`, as the way to come back for the project — a
-whole second run of an eleven-step script to answer one question. By the time
-that line is read, prep is installed and the two commands that finish the job
-are ordinary ones.
+whole second run of a ten-step script to answer one question. By the time that
+line is read, prep is installed and the two commands that finish the job are
+ordinary ones.
 
 ## Decision
 
@@ -56,12 +58,19 @@ that stands out.**
    cloned one, and `git clone` plus `prep setup` on a run that did not. Both are
    two lines, because a script cannot move the shell that called it, and both
    are one action.
-2. **The Claude Code login is written once and printed from every place that
-   hands it over.** `claude_login_note` holds the wording; the closing message
-   prints it under the reference heading, and the stop in front of the GitHub
-   login prints it as the second of two browser logins, saying outright that
-   doing both now saves a second trip. Somebody stopped at the GitHub login now
-   knows both person-steps at once.
+2. **The Claude Code login is written once and printed from both places that
+   send somebody to a browser.** `claude_login_note` holds the wording; the
+   closing message prints it under the reference heading, and the stop in front
+   of the GitHub login prints it as the second of two browser logins, saying
+   outright that doing both now saves a second trip. Somebody stopped at the
+   GitHub login now knows both person-steps at once.
+
+   **The other stops do not print it, and that is the line.** The script also
+   ends in front of a missing git identity and in front of a repository the
+   account cannot see. Neither sends anybody to a browser, so neither can be
+   folded into one trip — and each of them reaches the closing message on the
+   run that follows it, which is what the GitHub login stop could not do for
+   somebody who then went straight to a browser.
 3. **The machine-only ending names `git clone` and `prep setup` rather than the
    one-liner.** Neither re-downloads the script, and both exist on the machine
    the run has just finished building. A private repository needs a GitHub login
@@ -84,9 +93,9 @@ that stands out.**
   it is not a fallback — it is unreachable. Naming the login in both places is
   not duplication when one wording is written once and printed twice.
 - **Four topics under one heading is one topic too heavy to find.** The reader
-  of a bootstrap script has just watched eleven steps go by and wants to know
-  what to type. Ranking is what the ending owes them, and a heading is the
-  cheapest mark of rank that plain terminal output has.
+  of a bootstrap script has just watched ten steps go by and wants to know what
+  to type. Ranking is what the ending owes them, and a heading is the cheapest
+  mark of rank that plain terminal output has.
 - **Reference still has to be there.** The account tiers, Codex's login and
   `prep doctor` are all things somebody needs eventually, and this terminal is
   where they are looking. Moving them below a heading demotes them; deleting
@@ -150,7 +159,7 @@ and nothing was set up.
   Next: clone the repository you are working in and set it up. Open
   a new terminal, so it carries the tools this script installed.
 
-      git clone <git url> ~/my-project
+      git clone "<git url>" ~/my-project
       prep setup ~/my-project
 
 ==> For reference
@@ -162,6 +171,9 @@ describing the wrong problem:
 ```
 
 It had no terminal, and read exactly what an interactive one reads — decision 4.
+The placeholder is quoted so the line survives being pasted whole: `<git url>`
+unquoted is a redirection, and the old ending's `PREPARED_REPO=<git url>` had
+the same edge.
 
 **A run that cloned and set up a project**, given a local bare repository so no
 GitHub account was in the way, ends on the one action that starts work:
@@ -189,8 +201,26 @@ set, and the omission is written down rather than passed over.
 
 **One thing this uncovered is not this record's to settle.** `prep setup` prints
 its own `Next (2)` section, and on a run that clones, the script's `Next:` lands
-three lines under it. Two sections named Next, with different commands, in one
-screen. The script's is the one about this machine and this terminal; prep's is
-about the project. Whether prep's report should give way to the script's on a
-bootstrap run is a question about the **next step** concept (`CONTEXT.md`), not
-about the ending, and it is left open here.
+three lines under it:
+
+```
+Next (2)
+  claude '/setup-matt-pocock-skills'  writes the guidance prep does not
+  prep doctor                         checks this machine for the standard tools
+
+==> Done
+
+Your project is at /root/fixture
+
+  Next: open a new terminal, so it carries the tools this script
+  installed, and run these two lines.
+```
+
+Two sections named Next, with different commands, in one screen. **This record
+makes the script's ending name one action, and it does.** What it does not do is
+rank the ending against another program's report — prep's **next step** section
+is its own concept in `CONTEXT.md`, computed off the artifact list, and it is
+right on every run that is not a bootstrap. Whether it should give way when the
+script is the caller is a question about that concept, and answering it here
+would be deciding prep's output inside a record about a shell script. Left open,
+and written down so the next reader meets it as a known thing.

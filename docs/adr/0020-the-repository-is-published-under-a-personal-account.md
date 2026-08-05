@@ -6,7 +6,10 @@ and changes the repository ADR-0015 named. Everything ADR-0017 says about a
 clone the reader cannot see still holds for the project clone this record calls
 step 11. The question this record leaves open — where the login belongs, once
 one of its two clones no longer needs it — is answered by ADR-0021, which moves
-the login into the project step and renumbers the script to ten steps.
+the login into the project step and renumbers the script to ten steps. Decision
+3 is down to one string: ADR-0023 deleted `SCRIPT_URL`, since no ending quotes
+the one-liner back any more. `PREP_REPO` and the README are unchanged, and the
+account this record moved to is unchanged.
 **Sources:** ADR-0015, ADR-0017, ADR-0018, ADR-0019; the tree scan of 2026-08-05
 
 ## Context

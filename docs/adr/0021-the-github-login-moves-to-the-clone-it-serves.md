@@ -1,7 +1,10 @@
 # ADR-0021: The GitHub login moves to the clone it serves
 
 **Date:** 2026-08-05
-**Status:** Accepted — amends ADR-0017 decisions 1, 4, 5 and 6, and answers the
+**Status:** Accepted, with decision 4 narrowed by ADR-0023 — the Claude Code
+login is no longer named in the closing message alone, and the machine-only
+ending no longer sends anybody back through `curl … | bash`. Everything else
+here holds. Amends ADR-0017 decisions 1, 4, 5 and 6, and answers the
 question ADR-0020 left open. The chain rule that record states is untouched:
 the chain still carries what the destination needs at run time. What changes is
 where one link falls, now that one of the two clones behind it has gone away.
