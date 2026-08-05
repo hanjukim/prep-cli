@@ -100,6 +100,69 @@ export type HarnessId = "claude-code" | "codex";
  */
 export type HarnessSpec = ToolSpec & { id: HarnessId; tier: "harness"; handoffCommand: string };
 
+/**
+ * The four things prep can read as absent but must not close: a GitHub login, a
+ * git identity, and a login per installed harness. What separates a pass item
+ * from a gap is who may close it — the bootstrap script closes a gap, and a
+ * pass item is closed by the person or not at all.
+ */
+export type PassItemId = "github-login" | "git-identity" | "claude-login" | "codex-login";
+
+/**
+ * How one pass item stands.
+ * - ready: every check answered yes.
+ * - missing: a check answered no. A legitimate state, not a failure — an
+ *   account nobody has opened can stay unopened for years, so this never moves
+ *   the exit code.
+ * - unknown: a check could not be asked — it timed out, or its binary is not
+ *   here. The report names the check command so a person can ask it themselves.
+ */
+export type PassStatus = "ready" | "missing" | "unknown";
+
+/**
+ * One fixed read-only question, as the argv it is asked with.
+ *
+ * An array rather than a string on purpose: no shell ever sees it, so nothing
+ * in it can expand, split, or chain (docs/adr/0026).
+ */
+export type PassCheck = readonly string[];
+
+export type PassSpec = {
+  id: PassItemId;
+  /** One-line purpose. Human-facing wording, kept out of `--json` the way `ToolSpec.summary` is. */
+  summary: string;
+  /** The fixed questions, all of which must answer yes for ready. */
+  checks: readonly PassCheck[];
+  /**
+   * What closes the item. Always taken by a person — the bootstrap script reads
+   * gaps, not pass items, so nothing here is ever run unattended.
+   */
+  guidance: Guidance;
+  /**
+   * The harness whose absence takes this row off the table. A login question
+   * for a harness nobody installed has no useful answer. Absent means the row
+   * is always asked.
+   */
+  harness?: HarnessId;
+};
+
+export type PassResult = {
+  id: PassItemId;
+  status: PassStatus;
+  /** The checks as typed commands, so an `unknown` can name what to ask. */
+  checks: string[];
+  guidance: Guidance;
+};
+
+/**
+ * How one fixed check is asked. Tests replace it, so no test starts a real
+ * process (the same seam `which` opens for the PATH reads).
+ *
+ * true means the command exited 0, false any other exit, and null that it could
+ * not be asked at all — a timeout, or a binary that is not here.
+ */
+export type CheckFn = (argv: PassCheck) => Promise<boolean | null> | boolean | null;
+
 export type CheckStatus = "installed" | "missing" | "unsupported";
 
 export type CheckResult = {

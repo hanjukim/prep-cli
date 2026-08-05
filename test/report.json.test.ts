@@ -83,11 +83,12 @@ describe("JSON report snapshots", () => {
 });
 
 describe("the JSON contract", () => {
-  test("the top level is platform and results, nothing else", () => {
+  test("the top level is platform, results and pass, nothing else", () => {
     const payload = parse("darwin", { brew: "/x" }) as Record<string, unknown>;
-    expect(Object.keys(payload)).toEqual(["platform", "results"]);
+    expect(Object.keys(payload)).toEqual(["platform", "results", "pass"]);
     expect(payload.platform).toBe("darwin");
     expect(Array.isArray(payload.results)).toBe(true);
+    expect(Array.isArray(payload.pass)).toBe(true);
   });
 
   test("results keep the input order", () => {
@@ -199,6 +200,56 @@ describe("the JSON contract", () => {
     const output = render("darwin", {});
     expect(output.endsWith("}\n")).toBe(true);
     expect(output.endsWith("}\n\n")).toBe(false);
+  });
+});
+
+describe("the pass key", () => {
+  const PASS = [
+    {
+      id: "github-login" as const,
+      status: "missing" as const,
+      checks: ["gh auth status"],
+      guidance: { kind: "command" as const, command: "gh auth login" },
+    },
+    {
+      id: "claude-login" as const,
+      status: "unknown" as const,
+      checks: ["claude auth status"],
+      guidance: { kind: "manual" as const, note: "Run claude once" },
+    },
+  ];
+
+  function parsePass(): { pass: Record<string, unknown>[] } {
+    return JSON.parse(
+      renderJson({ platform: "darwin", results: checkAll(FIXTURE, "darwin", fakeWhich({})), pass: PASS }),
+    ) as { pass: Record<string, unknown>[] };
+  }
+
+  test("an entry has the four keys id, status, checks, guidance, in a fixed order", () => {
+    for (const item of parsePass().pass) {
+      expect(Object.keys(item)).toEqual(["id", "status", "checks", "guidance"]);
+    }
+  });
+
+  test("guidance branches on kind the way a result's does", () => {
+    const { pass } = parsePass();
+    expect(pass[0]?.guidance).toEqual({ kind: "command", command: "gh auth login" });
+    expect(pass[1]?.guidance).toEqual({ kind: "manual", note: "Run claude once" });
+  });
+
+  test("nothing was asked renders as an empty array, never a missing key", () => {
+    const payload = parse("darwin", {}) as { pass: unknown };
+    expect(payload.pass).toEqual([]);
+  });
+
+  test("no human summary wording rides along — the entry is commands and status", () => {
+    const output = renderJson({
+      platform: "darwin",
+      results: checkAll(FIXTURE, "darwin", fakeWhich({})),
+      pass: PASS,
+    });
+    expect(output).not.toContain("GitHub login");
+    expect(output).not.toContain("Pass (");
   });
 });
 

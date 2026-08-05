@@ -90,4 +90,31 @@ describe("installCommands", () => {
     expect(() => installCommands([])).toThrow(/results array/);
     expect(() => installCommands({ results: [{ id: 1 }] })).toThrow(/cannot read/);
   });
+
+  // The pass key divides on who closes a thing: the script closes gaps, a
+  // person closes pass items (docs/adr/0026). The reader never opens the key,
+  // so `gh auth login` cannot leak into the commands the script runs.
+  test("reads a report carrying the pass key exactly as one without it", () => {
+    const specs = all();
+    const results = checkAll(specs, "darwin", fakeWhich({ brew: "/opt/homebrew/bin/brew" }));
+    const bare = installCommands(JSON.parse(renderJson({ platform: "darwin", results })));
+    const withPass = installCommands(
+      JSON.parse(
+        renderJson({
+          platform: "darwin",
+          results,
+          pass: [
+            {
+              id: "github-login",
+              status: "missing",
+              checks: ["gh auth status"],
+              guidance: { kind: "command", command: "gh auth login" },
+            },
+          ],
+        }),
+      ),
+    );
+    expect(withPass).toEqual(bare);
+    expect(withPass).not.toContain("gh auth login");
+  });
 });

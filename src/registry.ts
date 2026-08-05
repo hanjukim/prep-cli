@@ -1,4 +1,4 @@
-import type { HarnessId, HarnessSpec, PlatformSpec, ToolSpec } from "./types.ts";
+import type { HarnessId, HarnessSpec, PassSpec, PlatformSpec, ToolSpec } from "./types.ts";
 
 /**
  * The catalog of what gets checked. Data, with nothing that decides anything.
@@ -227,6 +227,66 @@ function harness(
     platforms: { darwin, linux },
     handoffCommand: `${binary} '${mention}${HANDOFF_SKILL}'`,
   };
+}
+
+/**
+ * The pass items: what prep reads as absent but must not close (docs/adr/0026).
+ *
+ * Each check is a fixed argv, never a string a shell reads. This table is the
+ * whole whitelist of what doctor may start: no entry, no process. The checks
+ * read no secret and change nothing — `gh auth status` validates the token
+ * without printing it usably, and `git config --get` reads configuration. What
+ * either prints is discarded whole, so no account identifier can reach a
+ * report.
+ *
+ * The guidance is the plated command a person takes. The git identity carries
+ * placeholders because a name and email are somebody's to choose — the
+ * bootstrap script never reads pass guidance, so nothing here runs unattended.
+ * The Claude Code line is a note rather than a command string to paste blindly:
+ * the vendor's login is the first `claude` run itself, which opens a browser.
+ *
+ * The harness rows are gated on the harness being installed, read off the same
+ * registry table doctor already checks. A third harness added to `HARNESSES`
+ * gets its login row by adding one entry here, gated the same way.
+ */
+const PASS: readonly PassSpec[] = [
+  {
+    id: "github-login",
+    summary: "GitHub login",
+    checks: [["gh", "auth", "status"]],
+    guidance: { kind: "command", command: "gh auth login" },
+  },
+  {
+    id: "git-identity",
+    summary: "git identity",
+    checks: [
+      ["git", "config", "--get", "user.name"],
+      ["git", "config", "--get", "user.email"],
+    ],
+    guidance: {
+      kind: "command",
+      command: "git config --global user.name '<name>' && git config --global user.email '<email>'",
+    },
+  },
+  {
+    id: "claude-login",
+    summary: "Claude Code login",
+    checks: [["claude", "auth", "status"]],
+    guidance: { kind: "manual", note: "Run claude — its first run opens a browser and asks for the login" },
+    harness: "claude-code",
+  },
+  {
+    id: "codex-login",
+    summary: "Codex login",
+    checks: [["codex", "login", "status"]],
+    guidance: { kind: "command", command: "codex login" },
+    harness: "codex",
+  },
+];
+
+/** The pass items, in table order. The order is the report order. */
+export function passItems(): PassSpec[] {
+  return [...PASS];
 }
 
 /**

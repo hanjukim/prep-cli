@@ -122,3 +122,21 @@ Not applicable (1)
 No gaps.
 "
 `;
+
+exports[`the pass section a mixed pass renders every asked row 1`] = `
+"prep doctor · darwin
+
+Prerequisites
+  ✓ homebrew     /opt/homebrew/bin/brew
+
+Installed (12)
+  ✓ git  ripgrep  fd  zoxide  gh  bat  eza  fzf  jq  make  claude-code  codex
+
+Pass (3) — closed by you, or not at all
+  ✓ GitHub login
+  ✗ git identity       git config --global user.name '<name>' && git config --global user.email '<email>'
+  ? Claude Code login  unknown — ask it yourself: claude auth status
+
+No gaps.
+"
+`;

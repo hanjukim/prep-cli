@@ -46,7 +46,8 @@ exports[`JSON report snapshots macOS · installed, gaps, and not applicable mixe
         "command": "brew install fd"
       }
     }
-  ]
+  ],
+  "pass": []
 }
 "
 `;
@@ -96,7 +97,8 @@ exports[`JSON report snapshots Linux · including a binary the distribution rena
         "command": "sudo apt install fd-find"
       }
     }
-  ]
+  ],
+  "pass": []
 }
 "
 `;

@@ -1,5 +1,5 @@
 import { missingPrerequisites, rows as pair } from "../gaps.ts";
-import type { CheckResult, Guidance, Platform, Row, ToolSpec } from "../types.ts";
+import type { CheckResult, Guidance, PassResult, PassSpec, Platform, Row, ToolSpec } from "../types.ts";
 import { INDENT, join, pad, widest } from "./layout.ts";
 
 export type HumanReportInput = {
@@ -8,6 +8,10 @@ export type HumanReportInput = {
   specs: readonly ToolSpec[];
   /** The current state. Arrives in the same order as specs. */
   results: readonly CheckResult[];
+  /** The pass table, for its human wording. Absent when nothing was asked. */
+  passSpecs?: readonly PassSpec[];
+  /** What the pass checks answered, in table order. Gated rows never arrive. */
+  pass?: readonly PassResult[];
 };
 
 /** Flattens guidance into one line. For command guidance the command is the text. */
@@ -17,7 +21,7 @@ function guidanceText(guidance: Guidance): string {
 }
 
 export function renderHuman(input: HumanReportInput): string {
-  const { platform, specs, results } = input;
+  const { platform, specs, results, passSpecs = [], pass = [] } = input;
 
   const rows = pair(specs, results);
 
@@ -87,6 +91,28 @@ export function renderHuman(input: HumanReportInput): string {
     lines.push("", `Not applicable (${unsupported.length})`);
     for (const { spec } of unsupported) {
       lines.push(INDENT + join(`– ${pad(spec.id, idWidth)}`, `not checked on ${platform}`));
+    }
+  }
+
+  // The pass items: what only a person can close. Every asked row is shown,
+  // ready ones included, so the section always answers "was this looked at" —
+  // but none of it moves the exit code, and the wording keeps the closing to
+  // the person. An unknown names its own check command instead of an answer.
+  if (pass.length > 0) {
+    const summaryOf = new Map(passSpecs.map((spec) => [spec.id, spec.summary]));
+    const nameOf = (item: PassResult): string => summaryOf.get(item.id) ?? item.id;
+    const nameWidth = widest(pass.map(nameOf));
+
+    lines.push("", `Pass (${pass.length}) — closed by you, or not at all`);
+    for (const item of pass) {
+      const name = pad(nameOf(item), nameWidth);
+      if (item.status === "ready") {
+        lines.push(INDENT + join(`✓ ${name}`));
+      } else if (item.status === "missing") {
+        lines.push(INDENT + join(`✗ ${name}`, guidanceText(item.guidance)));
+      } else {
+        lines.push(INDENT + join(`? ${name}`, `unknown — ask it yourself: ${item.checks.join(" · ")}`));
+      }
     }
   }
 
