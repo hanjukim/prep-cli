@@ -208,13 +208,23 @@ describe("per-platform guidance", () => {
     expect(result.stdout).not.toContain("brew install");
   });
 
-  test("on Linux, fdfind counts fd as installed", () => {
+  test("on Linux, fdfind alone does not count fd as installed", () => {
     const result = run(["doctor"], {
       platformName: "linux",
       which: fakeWhich({ apt: "/usr/bin/apt", fdfind: "/usr/bin/fdfind" }),
     });
+    expect(result.stdout).not.toContain("✓ fd");
+    expect(result.stdout).toContain("sudo apt install -y fd-find");
+    expect(result.stdout).toContain('ln -sf "$(command -v fdfind)" ~/.local/bin/fd');
+  });
+
+  test("on Linux, fd on PATH is the whole of what fd needs", () => {
+    const result = run(["doctor"], {
+      platformName: "linux",
+      which: fakeWhich({ apt: "/usr/bin/apt", fd: "/home/me/.local/bin/fd" }),
+    });
     expect(result.stdout).toContain("✓ fd");
-    expect(result.stdout).not.toContain("sudo apt install -y fd-find");
+    expect(result.stdout).not.toContain("fd-find");
   });
 
   test("on macOS, fdfind does not fill fd", () => {

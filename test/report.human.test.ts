@@ -37,11 +37,16 @@ const HALF_DARWIN = {
   make: "/usr/bin/make",
 };
 
-/** The same mix on Linux. fd is found as fdfind, bat as batcat. */
+/**
+ * The same mix on Linux. bat and fd are looked up under their own names here as
+ * well: Debian ships them as batcat and fdfind, and the name is half of what a
+ * finished machine holds, so this one carries the link a closed gap left behind.
+ */
 const HALF_LINUX = {
   claude: "/usr/local/bin/claude",
   git: "/usr/bin/git",
   rg: "/usr/bin/rg",
+  bat: "/home/me/.local/bin/bat",
   batcat: "/usr/bin/batcat",
   fzf: "/usr/bin/fzf",
   jq: "/usr/bin/jq",
@@ -60,6 +65,7 @@ const FULL_DARWIN = {
 const FULL_LINUX = {
   ...HALF_LINUX,
   codex: "/usr/local/bin/codex",
+  fd: "/home/me/.local/bin/fd",
   fdfind: "/usr/bin/fdfind",
   zoxide: "/usr/bin/zoxide",
   gh: "/usr/bin/gh",
@@ -259,6 +265,37 @@ describe("human report content", () => {
   test("the fd gap on Linux points at the fd-find package", () => {
     const output = render("linux", { apt: "/usr/bin/apt" });
     expect(output).toContain("sudo apt install -y fd-find");
+  });
+
+  // The package is here and the name is not. Debian's own install of bat and
+  // fd-find leaves exactly this machine behind, and it is a gap: batcat and
+  // fdfind answer to nothing anybody types.
+  test("a machine holding only the Debian names reports both entries as gaps", () => {
+    const { bat, fd, ...debianNamesOnly } = FULL_LINUX;
+    const output = render("linux", { ...APT, ...debianNamesOnly });
+    expect(output).toContain("Gaps (2)");
+    expect(output).toMatch(/✗ bat\s/);
+    expect(output).toMatch(/✗ fd\s/);
+  });
+
+  test("the command for a renamed binary puts the canonical name on PATH", () => {
+    const output = render("linux", { ...APT, batcat: "/usr/bin/batcat" });
+    expect(output).toContain(
+      'sudo apt install -y bat && mkdir -p ~/.local/bin && ln -sf "$(command -v batcat)" ~/.local/bin/bat',
+    );
+  });
+
+  test("a machine that answers to bat and fd is given no command for either", () => {
+    const output = render("linux", { ...APT, ...FULL_LINUX });
+    expect(output).toContain("No gaps.");
+    expect(output).not.toContain("ln -sf");
+  });
+
+  test("macOS is untouched by any of this — brew installs both under their own names", () => {
+    const output = render("darwin", { ...BREW, ...FULL_DARWIN });
+    expect(output).not.toContain("batcat");
+    expect(output).not.toContain("fdfind");
+    expect(output).not.toContain("ln -sf");
   });
 
   test("the header carries the detected platform", () => {

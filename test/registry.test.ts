@@ -76,7 +76,7 @@ describe("registry", () => {
     for (const spec of all().filter((s) => s.tier === "harness")) {
       expect(Object.keys(spec.platforms).sort()).toEqual(["darwin", "linux"]);
       for (const platform of PLATFORMS) {
-        expect(spec.platforms[platform]?.binary).toBeUndefined();
+        expect(spec.platforms[platform]?.renamed).toBeUndefined();
       }
     }
   });
@@ -152,28 +152,70 @@ describe("registry", () => {
     }
   });
 
-  test("fd is looked up as fdfind on Linux and as fd on macOS", () => {
+  test("Debian ships fd as fdfind, and fd stays the name that counts", () => {
     const fd = all().find((spec) => spec.id === "fd")!;
     expect(fd.binary).toBe("fd");
-    expect(fd.platforms.linux?.binary).toBe("fdfind");
-    expect(fd.platforms.darwin?.binary).toBeUndefined();
+    expect(fd.platforms.linux?.renamed).toBe("fdfind");
+    expect(fd.platforms.darwin?.renamed).toBeUndefined();
   });
 
-  test("bat is looked up as batcat on Linux", () => {
+  test("Debian ships bat as batcat, and bat stays the name that counts", () => {
     const bat = all().find((spec) => spec.id === "bat")!;
     expect(bat.binary).toBe("bat");
-    expect(bat.platforms.linux?.binary).toBe("batcat");
-    expect(bat.platforms.darwin?.binary).toBeUndefined();
+    expect(bat.platforms.linux?.renamed).toBe("batcat");
+    expect(bat.platforms.darwin?.renamed).toBeUndefined();
   });
 
-  test("name quirks are expressed only as platform overrides, never as branches", () => {
-    const overridden = all().flatMap((spec) =>
+  test("a renamed binary is recorded in the table, never as a branch", () => {
+    const renamed = all().flatMap((spec) =>
       PLATFORMS.flatMap((platform) => {
-        const binary = spec.platforms[platform]?.binary;
-        return binary === undefined ? [] : [`${spec.id}:${platform}:${binary}`];
+        const name = spec.platforms[platform]?.renamed;
+        return name === undefined ? [] : [`${spec.id}:${platform}:${name}`];
       }),
     );
-    expect(overridden.sort()).toEqual(["bat:linux:batcat", "fd:linux:fdfind"]);
+    expect(renamed.sort()).toEqual(["bat:linux:batcat", "fd:linux:fdfind"]);
+  });
+
+  test("brew renames nothing, so macOS carries no renamed binary at all", () => {
+    for (const spec of all()) {
+      expect(spec.platforms.darwin?.renamed).toBeUndefined();
+    }
+  });
+
+  // The package is only half of what is wanted. A machine holding batcat and no
+  // bat answers to a name nobody types, so the command that closes the gap also
+  // puts the canonical name on PATH — in ~/.local/bin, the directory the
+  // bootstrap script exports for its own run and writes into a shell rc for the
+  // ones that come after.
+  test("a renamed binary's command installs the package and puts the name on PATH", () => {
+    const renamed = all().flatMap((spec) => {
+      const linux = spec.platforms.linux;
+      return linux?.renamed === undefined ? [] : [{ id: spec.id, binary: spec.binary, linux }];
+    });
+    expect(renamed.map((entry) => entry.id)).toEqual(["fd", "bat"]);
+
+    for (const { binary, linux } of renamed) {
+      const command = linux.guidance.kind === "command" ? linux.guidance.command : "";
+      expect(command).toContain("sudo apt install -y ");
+      expect(command).toContain("mkdir -p ~/.local/bin");
+      expect(command).toContain(`ln -sf "$(command -v ${linux.renamed})" ~/.local/bin/${binary}`);
+    }
+  });
+
+  // The bootstrap script runs the gap commands on every run, so a second run
+  // meets a machine the first one already finished. Every part of the command
+  // has to say the same thing twice: apt reports an installed package and stops,
+  // mkdir -p accepts a directory that is there, and ln -sf replaces the link.
+  test("a renamed binary's command says the same thing the second time it runs", () => {
+    for (const spec of all()) {
+      const linux = spec.platforms.linux;
+      if (linux?.renamed === undefined) continue;
+      const command = linux.guidance.kind === "command" ? linux.guidance.command : "";
+      expect(command).toMatch(/\bapt install -y\b/);
+      expect(command).toMatch(/\bmkdir -p\b/);
+      expect(command).toMatch(/\bln -sf\b/);
+      expect(command).not.toMatch(/\bln -s\s+"/);
+    }
   });
 
   test("macOS install commands use brew — only make diverges to the Xcode command line tools", () => {
@@ -198,7 +240,9 @@ describe("registry", () => {
       const guidance = spec.platforms.linux?.guidance;
       expect(guidance?.kind).toBe("command");
       const command = guidance?.kind === "command" ? guidance.command : "";
-      expect(command).toMatch(/^sudo apt install -y [a-z-]+$/);
+      // A renamed binary carries a second half — the link that puts the
+      // canonical name on PATH — and it hangs off the same apt command.
+      expect(command).toMatch(/^sudo apt install -y [a-z-]+( && .+)?$/);
     }
   });
 
@@ -208,10 +252,14 @@ describe("registry", () => {
       const guidance = byId.get(id)!.platforms[platform]!.guidance;
       return guidance.kind === "command" ? guidance.command : "";
     };
-    expect(command("fd", "linux")).toBe("sudo apt install -y fd-find");
+    expect(command("fd", "linux")).toBe(
+      'sudo apt install -y fd-find && mkdir -p ~/.local/bin && ln -sf "$(command -v fdfind)" ~/.local/bin/fd',
+    );
     expect(command("ripgrep", "darwin")).toBe("brew install ripgrep");
     expect(command("ripgrep", "linux")).toBe("sudo apt install -y ripgrep");
-    expect(command("bat", "linux")).toBe("sudo apt install -y bat");
+    expect(command("bat", "linux")).toBe(
+      'sudo apt install -y bat && mkdir -p ~/.local/bin && ln -sf "$(command -v batcat)" ~/.local/bin/bat',
+    );
     expect(command("gh", "darwin")).toBe("brew install gh");
     expect(command("gh", "linux")).toBe("sudo apt install -y gh");
   });

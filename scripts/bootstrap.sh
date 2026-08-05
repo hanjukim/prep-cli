@@ -723,6 +723,13 @@ else
     # /dev/null closes that off: whatever asks here gets end of input and fails
     # on its own, rather than quietly eating the tool behind it. The commands
     # themselves answer what apt would ask (src/registry.ts).
+    #
+    # A command may do more than install a package. Debian ships bat as batcat
+    # and fd-find as fdfind, so the command that closes either gap also links
+    # the canonical name into ~/.local/bin — the directory step 4 exported for
+    # this run and persisted for the shells after it (docs/adr/0023). Running
+    # them again changes nothing, which is what a step that runs on every
+    # bootstrap needs.
     if ! bash -c "$command" </dev/null; then
       # A tool that would not install is reported at the end rather than
       # stopping the run. The links of the chain are behind us; what is left
