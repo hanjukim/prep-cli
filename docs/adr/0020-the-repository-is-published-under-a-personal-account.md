@@ -3,7 +3,10 @@
 **Date:** 2026-08-05
 **Status:** Accepted — closes the question ADR-0018 and ADR-0019 both left open,
 and changes the repository ADR-0015 named. Everything ADR-0017 says about a
-clone the reader cannot see still holds for the project clone in step 11.
+clone the reader cannot see still holds for the project clone this record calls
+step 11. The question this record leaves open — where the login belongs, once
+one of its two clones no longer needs it — is answered by ADR-0021, which moves
+the login into the project step and renumbers the script to ten steps.
 **Sources:** ADR-0015, ADR-0017, ADR-0018, ADR-0019; the tree scan of 2026-08-05
 
 ## Context

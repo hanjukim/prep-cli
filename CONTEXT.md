@@ -304,9 +304,10 @@ one is a line about a machine, the other is a file in a project.
 **Entry point**:
 The first thing a person runs. Not prep, but a bootstrap shell script that sits
 outside it (docs/adr/0009). Somebody who has never used a CLI has a chain to
-cross before reaching prep at all — a package manager, git, bun, Node, gh, a
-GitHub login, a git identity, Claude Code, and prep itself. prep cannot build
-the world that precedes it, so the script takes that place.
+cross before reaching prep at all — a package manager, git, bun, Node, gh,
+Claude Code, and prep itself, and then, on the way to the project alone, a
+GitHub login and a git identity. prep cannot build the world that precedes it,
+so the script takes that place.
 
 The script opens the chain, reads `prep doctor --json` to close the gaps that
 are left, and then, if it has one to clone, clones the prepared repository and
@@ -342,11 +343,13 @@ unpacked into `~/.local` rather than a version manager or a distribution
 package. gh is a link because the project the chain clones last is somebody
 else's to choose and may be private, and an unauthenticated request for a
 private repository comes back 404 rather than forbidden, so a clone without a
-login fails while describing the wrong problem. prep's own repository was such a
-repository until it was published (docs/adr/0020); what that leaves behind is a
-login standing ahead of a clone that no longer needs it, on the one path — a
-machine and no project — where nothing else asks for an account. Codex is not in
-the chain — doctor names it as a gap and a person
+login fails while describing the wrong problem. **The login is a link on one
+branch only.** prep's own repository stopped needing it when it was published
+(docs/adr/0020), which left it standing ahead of a clone that no longer needed
+it, so it now sits inside the project step, after the repository has been named
+and only when that repository is on github.com (docs/adr/0021). A run that names
+no project meets no login at all, and neither does a project hosted elsewhere.
+Codex is not in the chain — doctor names it as a gap and a person
 installs it. So the harness install command lives in two places: the script
 holds the one that opens the chain, the registry holds the advice the report
 prints.
@@ -354,7 +357,8 @@ prints.
 **A login is not a link, and the script stops in front of one.** Carrying a
 dependency and performing an authentication are different things: software can
 be installed on somebody's behalf, and a browser login cannot (docs/adr/0017).
-So the script installs gh and then stops, naming
+So the script installs gh early, carries on without an account, and stops only
+where one is needed — inside the project step, naming
 `<path to gh> auth login --git-protocol https --web` and the device-flow page at
 `github.com/login/device` for the machines where no browser opens — WSL, a
 headless VM, SSH without display forwarding. Driving that login from the script
@@ -367,12 +371,15 @@ a login exists, since it is not interactive and it is what makes plain HTTPS
 
 **A person is asked for one thing, sent away for a second, and told about a
 third.** git's name and email are asked for when they are unset — and because
-that step now sits after the GitHub login, the answers are offered rather than
-demanded: `gh api user` gives the account's name, and the email defaults to the
-`<id>+<login>@users.noreply.github.com` address GitHub hands out for commits,
-which is safe to publish and always right for that account. Enter takes both, so
-the run that follows a login needs no typing at all. Asking still needs a
-terminal, so a run without one stops and names the two commands instead. The
+that step sits after the GitHub login, on the same branch, the answers are
+offered rather than demanded: `gh api user` gives the account's name, and the
+email defaults to the `<id>+<login>@users.noreply.github.com` address GitHub
+hands out for commits, which is safe to publish and always right for that
+account. Enter takes both, so the run that follows a login needs no typing at
+all. Asking still needs a terminal, so a run without one stops and names the two
+commands instead. A run that names no project never reaches the step, and its
+closing message names the same two commands rather than asking — the machine-only
+ending is where that run reads what is left for it (docs/adr/0021). The
 second thing is the GitHub login above. The third is the Claude Code login: the
 first `claude` run authenticates through a browser, which the script cannot do
 for anybody. The script's closing message is where that is said, and it is said
@@ -382,14 +389,22 @@ Claude Code carries a paid plan only — and it names Codex's own login, since
 doctor goes on to report Codex as a gap and installing it opens the same
 question again.
 
-**An account that cannot see a repository is not a broken machine.** Before each
-clone the script asks `gh repo view`, an authenticated question, and a failure
-is reported as a missing invitation naming the account that was logged in. An
-anonymous probe would have been worse than nothing: against a private repository
-it fails for everybody, including the people it was about to work for. The probe
-ahead of prep's own clone now asks about a public repository and answers yes for
-everybody, and it is kept because what it guards against is a repository that
-moved or was renamed, which no visibility settles.
+**An account that cannot see a repository is not a broken machine.** Before the
+project clone the script asks `gh repo view`, an authenticated question, and a
+failure is reported as a missing invitation naming the account that was logged
+in. An anonymous probe would have been worse than nothing: against a private
+repository it fails for everybody, including the people it was about to work
+for.
+
+**The probe ahead of prep's own clone asks git instead.** That repository is
+public, so visibility has one answer for everybody and only existence is left to
+ask about — and the probe runs before any login, where gh has nothing to ask
+with: gh makes no unauthenticated call at all, and answers even a public
+`gh repo view` by telling the caller to log in. So `git ls-remote` asks it, under
+`GIT_TERMINAL_PROMPT=0` so a repository that has stopped answering fails there
+rather than stopping the run at a password prompt (docs/adr/0021). What it guards
+against is a repository that moved or was renamed, which git settles as well as
+gh did.
 
 The script is `scripts/bootstrap.sh` here, served from the GitHub repository the
 one-liner names (docs/adr/0015). It sits beside the contract it reads, so a

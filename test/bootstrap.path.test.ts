@@ -9,7 +9,7 @@ import { join } from "node:path";
  * The script installs Node, gh and Claude Code into ~/.local/bin, which a shell
  * that starts later does not carry. Everything here is about the shells this
  * script does not control: the one the person types `gh auth login` into after
- * being stopped at step 6, and every terminal they open afterwards.
+ * being stopped at step 9, and every terminal they open afterwards.
  *
  * The function under test is lifted out of the script by name rather than the
  * script being sourced, because the script installs a machine the moment it is

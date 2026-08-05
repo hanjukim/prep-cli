@@ -5,15 +5,16 @@
 #   curl -fsSL https://raw.githubusercontent.com/hanjukim/prep-cli/main/scripts/bootstrap.sh | bash
 #
 # The line takes nothing after it. The repository the person came here to work
-# in is the one thing this script cannot know, so step 11 asks for it rather
+# in is the one thing this script cannot know, so step 9 asks for it rather
 # than the line carrying it, which is what keeps the entry point to something a
-# person can be handed whole. Step 11 argues the timing; an answer is optional
+# person can be handed whole. Step 9 argues the timing; an answer is optional
 # there, and going without one ends the run at a machine that is ready.
 #
 # Somebody who has never opened a terminal has a chain to cross before prep can
-# run at all: a package manager, git, bun, Node, gh, a GitHub login, a git
-# identity, Claude Code, and prep itself. prep cannot build the world that
-# precedes it, so this script takes that place. It opens the chain, then hands
+# run at all: a package manager, git, bun, Node, gh, Claude Code, and prep
+# itself — and then, on the way to the project alone, a GitHub login and a git
+# identity. prep cannot build the world that precedes it, so this script takes
+# that place. It opens the chain, then hands
 # the rest back to prep — `prep doctor --json` names a command for every gap that
 # is left and this script runs it. The tool list lives in the registry and never
 # here (docs/adr/0009 decision 3).
@@ -27,16 +28,17 @@
 #     installs it.
 #   - Node is a link, because the vendor's installer lays down a `claude` that
 #     will not start without one and never mentions it.
-#   - gh and its login are links, because the repository step 11 clones is
-#     somebody's own and may be one an unauthenticated request cannot see at
-#     all, which GitHub answers with 404 rather than a refusal. prep's own clone
-#     stopped being such a repository when this one was published
-#     (docs/adr/0020), so a run that clones no project now carries a login it
-#     does not need; where that login belongs in the chain is left open there.
-#     The login itself is a person's step, not this script's: carrying a
-#     dependency and performing an authentication are different things, and a
-#     browser login cannot be carried. The script stops in front of it and hands
-#     it over.
+#   - gh is a link, because the repository step 9 clones is somebody's own and
+#     may be one an unauthenticated request cannot see at all, which GitHub
+#     answers with 404 rather than a refusal. Its login is a link too, but only
+#     on the branch that has such a repository to clone: prep's own clone stopped
+#     needing one when this repository was published (docs/adr/0020), so the
+#     login sits inside step 9, after the project has been named, rather than
+#     ahead of everything (docs/adr/0021). A run that names no project meets no
+#     login at all. The login itself is a person's step, not this script's:
+#     carrying a dependency and performing an authentication are different
+#     things, and a browser login cannot be carried. The script stops in front of
+#     it and hands it over.
 #
 # Running it twice is safe, and stopping is cheap for the same reason. Every
 # install is guarded by whether the binary is already here, every clone by
@@ -48,8 +50,8 @@ set -Eeuo pipefail
 # Where prep itself is cloned from and kept. This is the repository the project
 # is developed in (docs/adr/0019); the instance it was built on first is
 # reachable inside one network only, and never by whoever runs this script. It
-# is public (docs/adr/0020), so this clone asks nothing of the login in step 6 —
-# the project clone in step 11 is what still may.
+# is public (docs/adr/0020), so this clone asks nothing of an account at all —
+# the project clone in step 9 is what still may (docs/adr/0021).
 PREP_REPO="${PREP_REPO:-https://github.com/hanjukim/prep-cli.git}"
 PREP_DIR="${PREP_DIR:-$HOME/.prep-cli}"
 
@@ -57,12 +59,12 @@ PREP_DIR="${PREP_DIR:-$HOME/.prep-cli}"
 # they have to run it again, so the line they are given is the line that works.
 SCRIPT_URL="${SCRIPT_URL:-https://raw.githubusercontent.com/hanjukim/prep-cli/main/scripts/bootstrap.sh}"
 
-# The repository a new person starts working in. Cloned in step 11 and handed to
-# `prep setup` in step 12. Step 11 is where it is asked for, so the entry point
+# The repository a new person starts working in. Cloned in step 9 and handed to
+# `prep setup` in step 10. Step 9 is where it is asked for, so the entry point
 # stays one line a person can be handed (docs/adr/0009).
 #
 # PREPARED_REPO is how a run answers ahead of the question — a fork, a test VM
-# or a run with no terminal sets it and step 11 does not ask. PROJECT_DIR names
+# or a run with no terminal sets it and step 9 does not ask. PROJECT_DIR names
 # where the clone lands, and a run that sets it alone is still asked which
 # repository to put there (docs/adr/0015).
 PREPARED_REPO="${PREPARED_REPO:-}"
@@ -162,7 +164,7 @@ ask_default() {
 
 # A question the run can carry on without an answer to. ask() loops until it has
 # one, which is right for everything else it is asked and wrong for the project
-# at step 11, where no answer is an ending the script already has. Enter leaves
+# at step 9, where no answer is an ending the script already has. Enter leaves
 # ANSWER empty and the caller reads that.
 #
 #   $1 the question, with its colon
@@ -223,7 +225,7 @@ install_tarball() {
 # both edit a shell rc on their own account; the tarballs above edit nothing, so
 # ~/.local/bin is the one directory no installer persists. That is the directory
 # Node and gh land in, and gh is the binary a person is sent away to run
-# themselves at step 6 — in a shell that has read no rc of this script's making.
+# themselves at step 9 — in a shell that has read no rc of this script's making.
 #
 # The line goes into every rc that is already there, since which one a shell
 # reads depends on the shell and on whether it is a login shell. With none there
@@ -278,16 +280,33 @@ github_slug() {
   printf '%s' "${url%.git}"
 }
 
-# Both repositories this script clones are private and shared with an
-# organization. One authenticated look separates two things a failed
-# `git clone` runs together: nobody is signed in, and the account that is signed
-# in was never added to the organization. The second is the ordinary case for
-# somebody new, and it is a missing invitation rather than a broken machine
-# (docs/adr/0017).
-require_repo_access() {
-  local url="$1" label="$2" slug
+# Whether a public repository is still where it says it is. prep's own is public
+# (docs/adr/0020) and this runs before any login, so the question goes to git
+# rather than to gh: gh makes no unauthenticated call at all, and answers even a
+# public `gh repo view` with "please run: gh auth login" (docs/adr/0021). What is
+# left to guard against once visibility is settled for everybody is a repository
+# that moved or was renamed, and git answers that without an account.
+#
+# GIT_TERMINAL_PROMPT=0 is what keeps a repository that has stopped being visible
+# from stopping the run at a username prompt instead of failing here.
+require_repo_exists() {
+  local url="$1" label="$2"
 
-  slug="$(github_slug "$url")" || return 0
+  if ! GIT_TERMINAL_PROMPT=0 git ls-remote --exit-code "$url" HEAD >/dev/null 2>&1; then
+    fail "$label is at $url, and nothing answers there. That repository has been
+moved, renamed or taken down. Nothing on this machine is broken. Check the url
+and run this script again — everything installed so far stays installed."
+  fi
+}
+
+# Whether the account that is logged in can see the project. It may be private
+# and shared with an organization, so one authenticated look separates two things
+# a failed `git clone` runs together: nobody is signed in, and the account that
+# is signed in was never added to the organization. The second is the ordinary
+# case for somebody new, and it is a missing invitation rather than a broken
+# machine (docs/adr/0017).
+require_repo_access() {
+  local slug="$1" url="$2" label="$3"
 
   if ! gh repo view "$slug" >/dev/null 2>&1; then
     fail "$label is at $url, and the account you are logged in as cannot see it.
@@ -298,11 +317,131 @@ Everything installed so far stays installed, and the script skips it."
   fi
 }
 
+# The one stop this script makes for a person mid-run. A private repository
+# answers an unauthenticated request with 404 rather than a refusal, so a clone
+# without a login fails while describing the wrong problem, and no login is what
+# the message has to name (docs/adr/0017).
+#
+# It is called from the project step and nowhere else. The project is the only
+# clone left that may need an account, so a run that names none never reaches
+# this, and neither does a project hosted anywhere but github.com
+# (docs/adr/0021).
+#
+# `gh auth login` is a full-screen prompt that reads the terminal directly, and
+# this script is running from a pipe, so handing it /dev/tty is not enough — a
+# real run answered with "could not prompt: unexpected escape sequence from
+# terminal". Carrying a dependency and performing an authentication are different
+# things: the script installs gh and then hands the login to the person, the same
+# way it hands over the Claude Code login at the end (docs/adr/0009,
+# docs/adr/0013 decision 5).
+require_github_login() {
+  if gh auth status >/dev/null 2>&1; then
+    echo "gh is already logged in."
+  else
+    fail "The project is on GitHub, and gh has no login yet. A private repository
+answers an unauthenticated request with 404 rather than a refusal, so cloning
+without one fails while describing the wrong problem. The login asks its
+questions on the terminal itself, which this script — running from a pipe —
+cannot hand to you.
+
+Run this yourself, then run this script again:
+  $GH_BIN auth login --git-protocol https --web
+
+It is written out in full because this terminal has not read a shell rc since gh
+was installed, so a plain \`gh\` here would not be found. A new terminal carries
+it by name.
+
+It prints a one-time code. If no browser opens, open https://github.com/login/device
+in any browser you can reach and enter the code there.
+
+Everything installed so far stays installed, and the second run skips it."
+  fi
+
+  # The login stores a token; this is what teaches git to send it, so a plain
+  # `git clone` over HTTPS works below. Run rather than assumed, because a login
+  # made some other way may never have done it.
+  gh auth setup-git
+
+  GH_ACCOUNT="$(gh api user -q .login 2>/dev/null || true)"
+  [ -z "$GH_ACCOUNT" ] || printf 'Logged in to GitHub as %s.\n' "$GH_ACCOUNT"
+}
+
+# The name and email git commits under. git installed and git usable are not the
+# same thing: with no user.name and user.email every commit is refused, and the
+# person finds that out at the end of their first piece of work rather than here
+# (docs/adr/0017). `gh auth setup-git` writes a credential helper and nothing
+# else, so it does not stand in for this.
+#
+# It runs on the project branch, after the login, because the login already
+# knows both answers — so this offers them and the person presses Enter twice. A
+# project hosted outside github.com reaches it with no login, and it asks
+# outright. A run that names no project never reaches it at all, and its closing
+# message names these two commands instead (docs/adr/0021).
+ensure_git_identity() {
+  local git_name git_email suggested_name suggested_email gh_id gh_login gh_user
+
+  git_name="$(git config --get user.name 2>/dev/null || true)"
+  git_email="$(git config --get user.email 2>/dev/null || true)"
+
+  if [ -n "$git_name" ] && [ -n "$git_email" ]; then
+    printf 'git already commits as %s <%s>.\n' "$git_name" "$git_email"
+    return
+  fi
+
+  have_tty || fail "git has no name and email to commit under, and there is no
+terminal here to ask for them. Set them yourself and run this script again:
+  git config --global user.name \"Your Name\"
+  git config --global user.email \"you@example.com\""
+
+  echo "Every commit you make carries a name and an email. git has neither yet."
+
+  # The account's own name, and the address GitHub hands out for commits. That
+  # address is <id>+<login>@users.noreply.github.com, built from the numeric id
+  # and the login: GitHub accepts it, it attributes the commit to the account,
+  # and it publishes nothing the account has not already published. One call
+  # answers both, and a failure leaves the defaults empty and asks outright.
+  #
+  # The name comes last because an account can leave it unset, and read() treats
+  # a tab as whitespace — an empty field anywhere but the end would shift every
+  # field after it into the wrong variable.
+  suggested_name=""
+  suggested_email=""
+  gh_id=""
+  gh_login=""
+
+  gh_user="$(
+    gh api user -q '[(.id | tostring), .login, (.name // "")] | @tsv' 2>/dev/null ||
+      true
+  )"
+  if [ -n "$gh_user" ]; then
+    IFS=$'\t' read -r gh_id gh_login suggested_name <<<"$gh_user"
+  fi
+
+  if [ -n "$gh_id" ] && [ -n "$gh_login" ]; then
+    suggested_email="${gh_id}+${gh_login}@users.noreply.github.com"
+    echo "GitHub knows both. Press Enter to take what it says, or type your own."
+  fi
+
+  if [ -z "$git_name" ]; then
+    ask_default "The name your commits should carry" "$suggested_name"
+    git_name="$ANSWER"
+    git config --global user.name "$git_name"
+  fi
+
+  if [ -z "$git_email" ]; then
+    ask_default "The email address your commits should carry" "$suggested_email"
+    git_email="$ANSWER"
+    git config --global user.email "$git_email"
+  fi
+
+  printf 'git now commits as %s <%s>.\n' "$git_name" "$git_email"
+}
+
 # ---------------------------------------------------------------------------
 # 1. The package manager, and git with it
 # ---------------------------------------------------------------------------
 
-step "1/12 package manager"
+step "1/10 package manager"
 
 case "$(uname -s)" in
   Darwin) PLATFORM="macos" ;;
@@ -364,7 +503,7 @@ fi
 # 2. git actually runs
 # ---------------------------------------------------------------------------
 
-step "2/12 git"
+step "2/10 git"
 
 have git ||
   fail "git is still not here after step 1. On macOS run: xcode-select --install"
@@ -374,7 +513,7 @@ git --version
 # 3. bun
 # ---------------------------------------------------------------------------
 
-step "3/12 bun"
+step "3/10 bun"
 
 if have bun; then
   echo "bun is already here."
@@ -394,18 +533,18 @@ bun --version
 # 4. Node, which Claude Code runs on
 # ---------------------------------------------------------------------------
 
-step "4/12 node"
+step "4/10 node"
 
-# The vendor installer in step 8 downloads a static binary and never mentions
+# The vendor installer in step 6 downloads a static binary and never mentions
 # Node, so it succeeds on a machine that has none — and the `claude` it leaves
 # behind then refuses to start. Node comes first, or the chain ends one step
 # short of its destination (docs/adr/0017).
 
 # Node, gh and Claude Code all land in ~/.local/bin, which a fresh shell does
-# not carry. Exporting it once here serves steps 5 and 8 as well
+# not carry. Exporting it once here serves steps 5 and 6 as well
 # (docs/adr/0013, PATH). The export covers this run; the rc files cover the
 # shells that come after it, including the one a person runs the GitHub login in
-# at step 6.
+# at step 9.
 export PATH="$HOME/.local/bin:$PATH"
 persist_on_path "$HOME/.local/bin"
 
@@ -429,10 +568,10 @@ have node ||
 node --version
 
 # ---------------------------------------------------------------------------
-# 5. gh, whose login both clones in this script depend on
+# 5. gh, which the project clone goes through
 # ---------------------------------------------------------------------------
 
-step "5/12 gh"
+step "5/10 gh"
 
 if have gh; then
   echo "gh is already here."
@@ -453,138 +592,17 @@ have gh ||
 gh --version
 
 # Where gh actually is, which differs by platform — ~/.local/bin from the
-# tarball, the brew prefix on macOS. Step 6 sends a person away to run gh
+# tarball, the brew prefix on macOS. Step 9 sends a person away to run gh
 # themselves, and the terminal they type it into is the one that ran the
 # one-liner: it read no rc file after this script wrote one, so a bare `gh`
 # there is a command not found. The full path always runs.
 GH_BIN="$(command -v gh)"
 
 # ---------------------------------------------------------------------------
-# 6. The GitHub login every clone after this depends on
+# 6. Claude Code
 # ---------------------------------------------------------------------------
 
-step "6/12 GitHub login"
-
-# Both repositories this script clones are private, so an unauthenticated
-# request does not get a permission error — it gets a 404, because that is how
-# GitHub keeps a private name from leaking. Logging in first is what makes the
-# two clones ahead possible at all, not a convenience for some users
-# (docs/adr/0017).
-#
-# The login is where this script stops. `gh auth login` is a full-screen prompt
-# that reads the terminal directly, and this script is running from a pipe, so
-# handing it /dev/tty is not enough — a real run answered with "could not
-# prompt: unexpected escape sequence from terminal". Carrying a dependency and
-# performing an authentication are different things: the script installs gh and
-# then hands the login to the person, the same way it hands over the Claude Code
-# login at the end (docs/adr/0009, docs/adr/0013 decision 5, docs/adr/0017).
-if gh auth status >/dev/null 2>&1; then
-  echo "gh is already logged in."
-else
-  fail "gh has no GitHub login yet, and the two clones after this step cannot see
-a private repository without one. The login asks its questions on the terminal
-itself, which this script — running from a pipe — cannot hand to you.
-
-Run this yourself, then run this script again:
-  $GH_BIN auth login --git-protocol https --web
-
-It is written out in full because this terminal has not read a shell rc since gh
-was installed, so a plain \`gh\` here would not be found. A new terminal carries
-it by name.
-
-It prints a one-time code. If no browser opens, open https://github.com/login/device
-in any browser you can reach and enter the code there.
-
-Everything installed so far stays installed, and the second run skips it."
-fi
-
-# The login stores a token; this is what teaches git to send it, so a plain
-# `git clone` over HTTPS works in the two steps that follow. Run rather than
-# assumed, because a login made some other way may never have done it.
-gh auth setup-git
-
-GH_ACCOUNT="$(gh api user -q .login 2>/dev/null || true)"
-[ -z "$GH_ACCOUNT" ] || printf 'Logged in to GitHub as %s.\n' "$GH_ACCOUNT"
-
-# ---------------------------------------------------------------------------
-# 7. The name and email git commits under
-# ---------------------------------------------------------------------------
-
-step "7/12 git identity"
-
-# git installed and git usable are not the same thing. With no user.name and
-# user.email every commit is refused, and the person finds that out at the end
-# of their first piece of work rather than here. Asking costs two lines now
-# (docs/adr/0017).
-#
-# `gh auth setup-git` above writes a credential helper and nothing else. It does
-# not set user.name or user.email, so this step cannot be dropped in favour of
-# it.
-#
-# It sits after the login because the login already knows both answers, so this
-# step offers them and the person presses Enter twice. On the second run — the
-# one that happens after somebody logs in at step 6 — it passes with nothing
-# typed at all.
-git_name="$(git config --get user.name 2>/dev/null || true)"
-git_email="$(git config --get user.email 2>/dev/null || true)"
-
-if [ -n "$git_name" ] && [ -n "$git_email" ]; then
-  printf 'git already commits as %s <%s>.\n' "$git_name" "$git_email"
-else
-  have_tty || fail "git has no name and email to commit under, and there is no
-terminal here to ask for them. Set them yourself and run this script again:
-  git config --global user.name \"Your Name\"
-  git config --global user.email \"you@example.com\""
-
-  echo "Every commit you make carries a name and an email. git has neither yet."
-
-  # The account's own name, and the address GitHub hands out for commits. That
-  # address is <id>+<login>@users.noreply.github.com, built from the numeric id
-  # and the login: GitHub accepts it, it attributes the commit to the account,
-  # and it publishes nothing the account has not already published. One call
-  # answers both, and a failure leaves the defaults empty and asks outright.
-  #
-  # The name comes last because an account can leave it unset, and read() treats
-  # a tab as whitespace — an empty field anywhere but the end would shift every
-  # field after it into the wrong variable.
-  suggested_name=""
-  suggested_email=""
-  gh_id=""
-  gh_login=""
-
-  gh_user="$(
-    gh api user -q '[(.id | tostring), .login, (.name // "")] | @tsv' 2>/dev/null ||
-      true
-  )"
-  if [ -n "$gh_user" ]; then
-    IFS=$'\t' read -r gh_id gh_login suggested_name <<<"$gh_user"
-  fi
-
-  if [ -n "$gh_id" ] && [ -n "$gh_login" ]; then
-    suggested_email="${gh_id}+${gh_login}@users.noreply.github.com"
-    echo "GitHub knows both. Press Enter to take what it says, or type your own."
-  fi
-
-  if [ -z "$git_name" ]; then
-    ask_default "The name your commits should carry" "$suggested_name"
-    git_name="$ANSWER"
-    git config --global user.name "$git_name"
-  fi
-
-  if [ -z "$git_email" ]; then
-    ask_default "The email address your commits should carry" "$suggested_email"
-    git_email="$ANSWER"
-    git config --global user.email "$git_email"
-  fi
-
-  printf 'git now commits as %s <%s>.\n' "$git_name" "$git_email"
-fi
-
-# ---------------------------------------------------------------------------
-# 8. Claude Code
-# ---------------------------------------------------------------------------
-
-step "8/12 Claude Code"
+step "6/10 Claude Code"
 
 if have claude; then
   echo "Claude Code is already here."
@@ -621,14 +639,16 @@ claude plugin install mattpocock-skills@claude-plugins-official
 claude plugin install caveman@caveman
 
 # ---------------------------------------------------------------------------
-# 9. prep
+# 7. prep
 # ---------------------------------------------------------------------------
 
-step "9/12 prep"
+step "7/10 prep"
 
-# Asked before the clone, so an account without access reads a sentence about an
-# invitation rather than git's own "repository not found".
-require_repo_access "$PREP_REPO" "prep"
+# Asked before the clone, so a repository that has moved reads a sentence about
+# the url rather than git's own "repository not found". This one is public, and
+# no login has happened at this point in the run, so the question goes to git
+# (docs/adr/0021).
+require_repo_exists "$PREP_REPO" "prep"
 
 if [ -d "$PREP_DIR/.git" ]; then
   echo "prep is already cloned at $PREP_DIR. Updating."
@@ -644,10 +664,10 @@ fi
 have prep || fail "prep is linked but not on PATH. Expected it in $BUN_INSTALL/bin"
 
 # ---------------------------------------------------------------------------
-# 10. The gaps prep names
+# 8. The gaps prep names
 # ---------------------------------------------------------------------------
 
-step "10/12 remaining gaps"
+step "8/10 remaining gaps"
 
 # doctor exits 1 when it finds gaps, which is the ordinary case in a bootstrap.
 # The exit code is dropped and the report is what gets read.
@@ -678,14 +698,14 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 11. The prepared repository
+# 9. The prepared repository
 # ---------------------------------------------------------------------------
 
-step "11/12 project"
+step "9/10 project"
 
 # No repository named is not a failure. Everything before this step is the
 # machine, and the machine is ready — only the last stretch, the project
-# itself, has nothing to point at. Stopping here with an error would mark ten
+# itself, has nothing to point at. Stopping here with an error would mark eight
 # steps of finished work as a failed run, so the script says what it did, says
 # how to come back for the project, and ends well.
 PROJECT_READY=1
@@ -711,22 +731,40 @@ if [ "$PROJECT_READY" -eq 1 ] && [ -z "$PROJECT_DIR" ]; then
   PROJECT_DIR="$HOME/$(basename "$PREPARED_REPO" .git)"
 fi
 
+# The GitHub login and the git identity both live here, on this branch, and a
+# run that stopped above meets neither (docs/adr/0021). The login is what makes a
+# private repository visible at all, so it comes before the clone and before the
+# question that names the account; the identity comes after it, because the
+# login is what lets that question be offered rather than demanded.
+#
+# A project hosted anywhere but github.com has no use for a GitHub account, so
+# the login is skipped and the identity asks outright.
 if [ "$PROJECT_READY" -eq 1 ]; then
+  PROJECT_SLUG="$(github_slug "$PREPARED_REPO" || true)"
+
+  if [ -n "$PROJECT_SLUG" ]; then
+    require_github_login
+  fi
+
+  ensure_git_identity
+
   if [ -d "$PROJECT_DIR/.git" ]; then
     echo "The project is already cloned at $PROJECT_DIR."
   else
-    # The same question as step 9, about the repository the person came here
-    # for.
-    require_repo_access "$PREPARED_REPO" "The project"
+    # Asked before the clone, so an account without access reads a sentence
+    # about an invitation rather than git's own "repository not found".
+    if [ -n "$PROJECT_SLUG" ]; then
+      require_repo_access "$PROJECT_SLUG" "$PREPARED_REPO" "The project"
+    fi
     git clone "$PREPARED_REPO" "$PROJECT_DIR"
   fi
 fi
 
 # ---------------------------------------------------------------------------
-# 12. prep setup
+# 10. prep setup
 # ---------------------------------------------------------------------------
 
-step "12/12 prep setup"
+step "10/10 prep setup"
 
 if [ "$PROJECT_READY" -eq 1 ]; then
   # Exit 1 means it wrote nothing, which its own report explains — a merge
@@ -759,6 +797,21 @@ else
   # already installed is skipped on that second run.
   printf 'This machine is ready. No project was named, so nothing was cloned\n'
   printf 'and nothing was set up.\n'
+
+  # The identity sits behind the GitHub login, and both belong to the project
+  # branch this run did not take (docs/adr/0021). So it is named here rather
+  # than asked for — this is where a run that stops at the machine reads what is
+  # left for it, the same as the Claude Code login below. A second run that
+  # names a project logs in first and offers both answers instead.
+  if [ -z "$(git config --get user.name 2>/dev/null || true)" ] ||
+    [ -z "$(git config --get user.email 2>/dev/null || true)" ]; then
+    printf '\ngit has no name and email to commit under yet, and every commit\n'
+    printf 'needs both. Set them yourself:\n'
+    printf '  git config --global user.name "Your Name"\n'
+    printf '  git config --global user.email "you@example.com"\n'
+    printf 'Or leave them — the run that names a project asks GitHub and offers\n'
+    printf 'you the answers.\n'
+  fi
 
   if have_tty; then
     printf '\nWhen you have the repository you are working in, run this again and\n'

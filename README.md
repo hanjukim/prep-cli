@@ -22,8 +22,8 @@ report. It prints a command; a person runs it.
 
 The first thing to run is not prep. Somebody who has never opened a terminal has
 a chain to cross before prep exists on their machine — a package manager, git,
-bun, Node, gh, a GitHub login, a git identity, Claude Code, and prep itself — so
-a shell script takes that place:
+bun, Node, gh, Claude Code, and prep itself — so a shell script takes that
+place:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/hanjukim/prep-cli/main/scripts/bootstrap.sh | bash
@@ -33,9 +33,13 @@ Nothing goes after that line. The script opens the chain, closes what
 `prep doctor --json` reports, and then asks for the repository you came to work
 in — the one thing it cannot work out for itself. It clones what you name and
 runs `prep setup` in it. Press Enter instead and the run stops at a machine that
-is ready, and tells you how to come back for the project. It stops in front of
-the GitHub login too, because a browser login cannot be performed on somebody's
-behalf, and running it again picks up where it stopped.
+is ready, and tells you how to come back for the project.
+
+Naming a repository on GitHub is what brings the last two links in: a GitHub
+login, and the git name and email that login can answer for. The script stops in
+front of the login, because a browser login cannot be performed on somebody's
+behalf, and running it again picks up where it stopped. A run that names no
+project meets neither.
 
 On a machine that already has bun, prep runs straight from a clone:
 

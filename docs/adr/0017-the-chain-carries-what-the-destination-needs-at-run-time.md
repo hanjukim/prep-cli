@@ -12,7 +12,11 @@ ADR-0018 when that ticket closed without settling it, and ADR-0020 answers it:
 the repository is public and lives at `hanjukim/prep-cli`. One of the two clones
 this record calls private therefore is not, and gh remains a link for the other
 — the project somebody names in step 11. Whether the login still belongs at
-step 6 is the question ADR-0020 leaves open. Everything else stands.
+step 6 is the question ADR-0020 leaves open, and ADR-0021 answers it: the login
+and the git identity move into the project step, the probe ahead of prep's own
+clone stops being authenticated, and the script is ten steps rather than twelve.
+Decisions 1, 4, 5 and 6 below are narrowed there; every step number in this
+record is the numbering it was written under. Everything else stands.
 **Sources:** ADR-0009, ADR-0011, ADR-0013, ADR-0015,
 `https://claude.ai/install.sh`, `https://nodejs.org/dist/index.json`,
 `https://github.com/cli/cli/releases`, a bare-Linux simulation run on 2026-08-01,
