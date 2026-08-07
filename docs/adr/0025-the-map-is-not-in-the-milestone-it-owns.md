@@ -1,14 +1,15 @@
 # ADR-0025: The map is not in the milestone it owns
 
 **Date:** 2026-08-06
-**Status:** Accepted. It narrows no record before it. ADR-0019 put the tracker
-on GitHub and the wayfinding conventions in `docs/agents/issue-tracker.md`; the
-milestone's job there — collecting a map's children so one `gh issue list`
-answers the frontier — is unchanged, and this record only says who is in the
-collection.
+**Status:** Accepted. It narrows no record before it. The wayfinding
+conventions in `docs/agents/issue-tracker.md` arrived without a record of their
+own, and the milestone's job among them — collecting a map's children so one
+`gh issue list` answers the frontier — is unchanged here. This record only
+says who is in the collection.
 **Sources:** `docs/agents/issue-tracker.md` under **Wayfinding operations**;
-ADR-0019; the live tracker's first map, which was opened inside its own
-milestone and read wrong from both directions
+ADR-0019, for the tracker this is written against; the live tracker's first
+map, which was opened inside its own milestone and read wrong from both
+directions
 
 ## Context
 
@@ -57,9 +58,11 @@ stands outside.**
    opens a child is where membership is conferred, and adoption
    (`gh issue edit <n> --parent <map> --milestone "<map title>"`) sets both in
    the same call for the same reason.
-2. **Both frontier queries drop their label filter.** With the map out of the
-   milestone there is nothing for the filter to exclude, and `labels` leaves
-   the `--json` field lists it was added for.
+2. **No frontier query filters the map out.** With the map out of the
+   milestone there is nothing to exclude, so neither form carries a
+   `wayfinder:map` filter and neither `--json` list carries `labels` for one.
+   The first attempt at this bug added exactly that filter; the rationale
+   below says why it was not kept.
 3. **The ranked form ranks tail-safe.**
 
    ```
@@ -67,13 +70,17 @@ stands outside.**
    ```
 
    A milestone can still hold an issue the map does not list — an adoption
-   that set `--milestone` and forgot `--parent`, a ticket un-parented
-   afterwards, a child past the map's hundredth sub-issue. `// infinite` sends
-   any such ticket to the tail instead of the head, and the trailing `.number`
-   orders the tail among itself.
-4. **The progress bullet keeps its claim and earns it.** The milestone's
-   open/closed totals are the children's totals, because the map is not in
-   there inflating them by one.
+   that set `--milestone` and forgot `--parent`, or a ticket un-parented
+   afterwards. `// infinite` sends any such ticket to the tail instead of the
+   head, and the trailing `.number` orders the tail among itself. This is the
+   ranked form only. The plain form reads no sub-issue list, so it cannot tell
+   a stray member from a child and sorts it by number like any other; the
+   bullet says so, and the guarantee is what the ranked form is for.
+4. **The progress bullet states its condition.** The milestone's open and
+   closed totals are the children's totals only while every milestone member
+   is a child. Keeping the map out removes the inflator this record is about
+   and not the class it belongs to, so the bullet now carries the condition
+   instead of asserting the equality flat.
 5. **The document says it where the milestone is defined**, not beside the
    query that suffered from it. The frontier query is one reader of a rule
    about membership; the rule belongs with membership.
@@ -103,18 +110,24 @@ stands outside.**
 
 ## Consequences
 
-- The one map already opened on this tracker has to leave its milestone
-  (`gh issue edit 26 --remove-milestone`). Until it does, it stands in the
-  frontier — at the tail, once the rank above lands, rather than at the head.
-- A milestone member that is not a sub-issue no longer takes first place, but
-  it does still appear in the frontier, at the tail. That is deliberate: it is
-  open, unassigned and unblocked, so it is pickable work, and the map's own
-  children go ahead of it. The tail is where a reader notices the parent link
-  is missing.
-- Membership is now a thing that can be wrong. Nothing enforces it — GitHub
-  will happily put a map in any milestone — so `/wayfinder` opening a map is
-  the one place the rule is kept, and `docs/agents/issue-tracker.md` is where
-  it is written down for whoever writes the next such caller.
+- The one map already opened on this tracker left its milestone
+  (`gh issue edit 26 --remove-milestone`) in the change that carries this
+  record.
+- In the ranked form, a milestone member that is not a sub-issue no longer
+  takes first place; it lands at the tail. It still appears, which is
+  deliberate — it is open, unassigned and unblocked, so it is pickable work,
+  and the tail is where a reader notices the parent link is missing. The plain
+  form has no sub-issue list to compare against and still sorts such a ticket
+  by number, so it can hand it the head. That is the price of a form that
+  reads the milestone alone.
+- Membership is now a thing that can be wrong, and the live tracker already
+  holds one that is: an issue given the milestone with no parent, left as it
+  stands. It is why the milestone's totals and `subIssuesSummary` disagree by
+  one there, and why the progress bullet carries a condition rather than an
+  equality. Nothing enforces membership — GitHub will put any issue in any
+  milestone — so `/wayfinder` opening a map is the one place the rule is kept,
+  and `docs/agents/issue-tracker.md` is where it is written down for whoever
+  writes the next such caller.
 - `CONTEXT.md` and `scripts/CONTEXT.md` are untouched. Map, milestone and
   frontier are tracker conventions, not terms prep or the bootstrap script is
   built out of; `CONTEXT-MAP.md` puts them in neither glossary.
