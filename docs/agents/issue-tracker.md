@@ -118,7 +118,7 @@ title. The map itself stays out of that milestone.
   the **query**. Both are set by the one `gh issue create` call that opens the
   child, so they cannot drift apart.
 
-  **The map is not a member of the milestone it owns** (docs/adr/0025). Owning
+  **The map is not a member of the milestone it owns** (docs/adr/0030). Owning
   a milestone and standing inside it are different things: the milestone
   answers "what is the work", and the map is what the work is read from. Two
   readers below depend on that. The frontier query takes everything the
