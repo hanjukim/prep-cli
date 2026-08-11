@@ -28,11 +28,27 @@ function shellFunction(name: string): string {
  * Everything `persist_on_path` stands on: which shell the person runs, which
  * files that shell reads, what to create when it reads none, and the syntax each
  * file takes.
+ *
+ * `have` is on the list because `login_shell` asks it which password database
+ * this machine has. A missing name here does not fail loudly — bash prints
+ * `command not found` on stderr and the caller reads an empty answer — so a
+ * function left off this list is a test that passes without exercising
+ * anything.
  */
-const PATH_FUNCTIONS = ["login_shell", "rc_candidates", "create_default_rc", "rc_block"]
+const PATH_FUNCTIONS = [
+  "have",
+  "login_shell",
+  "rc_candidates",
+  "shell_rc_candidates",
+  "create_default_rc",
+  "rc_block",
+]
   .concat("persist_on_path")
   .map(shellFunction)
   .join("\n");
+
+/** The two that put a directory on this run's own PATH. */
+const PATH_EXPORTS = ["put_on_path", "put_installed_on_path"].map(shellFunction).join("\n");
 
 /**
  * Runs a snippet under a HOME of its own, and hands back that HOME.
@@ -153,9 +169,37 @@ describe("persist_on_path", () => {
     expect(read(home, ".profile")).toBe("");
   });
 
-  test("a shell nobody named gets .profile", () => {
-    const home = runInFreshHome('persist_on_path "$HOME/.local/bin"', {}, "");
+  test("a machine that names no shell and holds no password database gets .profile", () => {
+    // `$SHELL` unset and neither `getent` nor `dscl` to ask. `have` is
+    // overridden rather than PATH emptied, because the machine running the
+    // tests has one of those two on it and would answer for its own account.
+    const home = runInFreshHome(
+      'have() { return 1; }\npersist_on_path "$HOME/.local/bin"',
+      {},
+      "",
+    );
     expect(read(home, ".profile")).toContain(".local/bin");
+  });
+
+  test("a zsh account with a .profile and no .zshrc gets a .zshrc", () => {
+    // The machine has a rc file, so the wider list is not empty — and zsh reads
+    // none of it. Asking whether *any* rc exists put the whole run's PATH in
+    // .profile, which zsh never opens, with create_default_rc unable to fire.
+    const home = runInFreshHome('persist_on_path "$HOME/.bun/bin"', { ".profile": "# mine\n" }, "/bin/zsh");
+
+    expect(read(home, ".zshrc")).toContain(".bun/bin");
+    // .profile is still written to: a machine may run more than one shell.
+    expect(read(home, ".profile")).toContain(".bun/bin");
+    expect(read(home, ".profile")).toContain("# mine");
+  });
+
+  test("a bash account with a .bashrc gets no file it did not have", () => {
+    // The counterpart: bash does read .bashrc, so nothing needs creating.
+    const home = runInFreshHome('persist_on_path "$HOME/.bun/bin"', { ".bashrc": "# mine\n" });
+
+    expect(read(home, ".bashrc")).toContain(".bun/bin");
+    expect(read(home, ".zshrc")).toBe("");
+    expect(read(home, ".profile")).toBe("");
   });
 
   test("a bash login shell reading .bash_profile is written to, not passed over", () => {
@@ -588,5 +632,117 @@ describe("the commands the script hands to a person", () => {
     // left to bun's own installer having identified this machine's shell.
     expect(SCRIPT).toContain('persist_on_path "$HOME/.local/bin"');
     expect(SCRIPT).toContain('persist_on_path "$BUN_INSTALL/bin"');
+  });
+});
+
+describe("login_shell, where the environment names no shell", () => {
+  /** Runs `login_shell` with `$SHELL` unset and the databases stubbed. */
+  const askDatabase = (stubs: string): string => {
+    const result = Bun.spawnSync({
+      cmd: [
+        "bash",
+        "-c",
+        `set -Eeuo pipefail\n${shellFunction("have")}\n${stubs}\n${shellFunction("login_shell")}\nunset SHELL\nlogin_shell`,
+      ],
+      env: { ...process.env, SHELL: "" },
+    });
+
+    if (result.exitCode !== 0) {
+      throw new Error(`the snippet failed: ${result.stderr.toString()}`);
+    }
+    return result.stdout.toString().trim();
+  };
+
+  test("reads the record out of getent where the machine has one", () => {
+    const stubs = [
+      'have() { [ "$1" = getent ]; }',
+      'getent() { echo "somebody:x:1000:1000::/home/somebody:/usr/bin/fish"; }',
+    ].join("\n");
+
+    expect(askDatabase(stubs)).toBe("fish");
+  });
+
+  test("reads it out of Directory Services on a Mac, which carries no getent", () => {
+    // macOS has no getent at all, and prints the record as a label and a value.
+    const stubs = [
+      'have() { [ "$1" = dscl ]; }',
+      'dscl() { echo "UserShell: /bin/zsh"; }',
+    ].join("\n");
+
+    expect(askDatabase(stubs)).toBe("zsh");
+  });
+
+  test("answers nothing where the machine holds neither, which is read as POSIX", () => {
+    expect(askDatabase("have() { return 1; }")).toBe("");
+  });
+});
+
+describe("the directories this run puts on its own PATH", () => {
+  /** Runs a snippet with both PATH helpers in scope. */
+  const runWithExports = (snippet: string): string => {
+    const result = Bun.spawnSync({
+      cmd: ["bash", "-c", `set -Eeuo pipefail\n${PATH_EXPORTS}\n${snippet}`],
+    });
+
+    if (result.exitCode !== 0) {
+      throw new Error(`the snippet failed: ${result.stderr.toString()}`);
+    }
+    return result.stdout.toString().trim();
+  };
+
+  test("put_on_path adds the directory once, however often it is asked", () => {
+    const counted = [
+      'PATH=/usr/bin:/bin',
+      'put_on_path /opt/somewhere',
+      'put_on_path /opt/somewhere',
+      'printf "%s" "$PATH" | tr ":" "\\n" | grep -c "^/opt/somewhere$"',
+    ].join("\n");
+
+    expect(runWithExports(counted)).toBe("1");
+  });
+
+  test("put_installed_on_path adds it where the tool is on the disk", () => {
+    const installed = [
+      'dir="$(mktemp -d)/bin"',
+      'mkdir -p "$dir" && printf "#!/bin/sh\\n" > "$dir/thing" && chmod +x "$dir/thing"',
+      'PATH=/usr/bin:/bin',
+      'put_installed_on_path "$dir" thing',
+      'case ":$PATH:" in *":$dir:"*) echo on ;; *) echo off ;; esac',
+    ].join("\n");
+
+    expect(runWithExports(installed)).toBe("on");
+  });
+
+  test("and leaves PATH alone where it is not, so nothing rests on a directory with nothing in it", () => {
+    const empty = [
+      'dir="$(mktemp -d)/bin"',
+      'mkdir -p "$dir"',
+      'PATH=/usr/bin:/bin',
+      'put_installed_on_path "$dir" thing',
+      'case ":$PATH:" in *":$dir:"*) echo on ;; *) echo off ;; esac',
+    ].join("\n");
+
+    expect(runWithExports(empty)).toBe("off");
+  });
+});
+
+describe("what step 3 owes step 7", () => {
+  /** One numbered step of the script, from its heading to the next one. */
+  const step = (n: number): string =>
+    SCRIPT.split(`step "${n}/10`)[1]?.split(`step "${n + 1}/10`)[0] ?? "";
+
+  test("bun's bin directory goes on PATH whatever answered `bun`", () => {
+    // Step 7 runs `bun link`, which puts prep in $BUN_INSTALL/bin however bun
+    // itself arrived. So this cannot be the disk-reading form: a machine whose
+    // bun came from brew would pass step 3, link prep into a directory nothing
+    // on PATH, and fail step 7 on a prep it had just installed.
+    expect(step(3)).toContain('put_on_path "$BUN_INSTALL/bin"');
+    expect(step(7)).toContain("bun link");
+  });
+
+  test("and it is read off the disk before the question, which is the other half", () => {
+    // Without this a second run from a shell that has read no rc reinstalls
+    // bun, and bun's own installer appends to a rc file every time it runs.
+    expect(step(3)).toContain('put_installed_on_path "$BUN_INSTALL/bin" bun');
   });
 });
