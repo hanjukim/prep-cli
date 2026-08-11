@@ -1,20 +1,20 @@
 /**
  * The gap reader the bootstrap script runs.
  *
- * `prep doctor --json` says what this machine is still missing and what closes
+ * `prep chef --json` says what this machine is still missing and what closes
  * each gap; this turns that report into one command per line, which the script
  * runs in order. prep decides and the script executes (docs/adr/0009), so no
  * tool name and no install command is written here.
  *
  * Two kinds of entry are dropped. A gap whose guidance is `manual` carries no
- * command — there is nothing to run, and printing the note is doctor's job. A
+ * command — there is nothing to run, and printing the note is chef's job. A
  * harness is dropped because it is not a gap at all: the script installs Claude
  * Code itself as a link in the chain, and Codex is left for a person to install
  * (docs/adr/0013). The ids come from the registry rather than from a list here,
  * so adding a third harness does not need this file edited.
  *
- * Reading stdin rather than running `prep doctor` itself keeps the process tree
- * flat and lets the shell decide what to do with doctor's exit code — finding
+ * Reading stdin rather than running `prep chef` itself keeps the process tree
+ * flat and lets the shell decide what to do with chef's exit code — finding
  * gaps is exit 1, which is the ordinary case during a bootstrap.
  */
 
@@ -68,7 +68,7 @@ function toEntry(value: unknown): Entry | null {
 export function installCommands(report: unknown): string[] {
   if (!isRecord(report) || !Array.isArray(report.results)) {
     throw new Error(
-      "prep doctor --json carried no results array. The contract this script reads has moved.",
+      "prep chef --json carried no results array. The contract this script reads has moved.",
     );
   }
 
@@ -79,7 +79,7 @@ export function installCommands(report: unknown): string[] {
     const entry = toEntry(value);
     if (entry === null) {
       throw new Error(
-        `prep doctor --json carried an entry this script cannot read: ${JSON.stringify(value)}`,
+        `prep chef --json carried an entry this script cannot read: ${JSON.stringify(value)}`,
       );
     }
 

@@ -233,7 +233,7 @@ function harness(
  * The pass items: what prep reads as absent but must not close (docs/adr/0026).
  *
  * Machine rows are answered by a fixed argv, never a string a shell reads. Those
- * rows are the whole whitelist of what doctor may start: no entry, no process.
+ * rows are the whole whitelist of what chef may start: no entry, no process.
  * The checks read no secret and change nothing — `gh auth status` validates the
  * token without printing it usably, and `git config --get` reads configuration.
  * What either prints is discarded whole, so no account identifier can reach a
@@ -246,7 +246,7 @@ function harness(
  * the vendor's login is the first `claude` run itself, which opens a browser.
  *
  * The harness rows are gated on the harness being installed, read off the same
- * registry table doctor already checks. A third harness added to `HARNESSES`
+ * registry table chef already checks. A third harness added to `HARNESSES`
  * gets its login row by adding one entry here, gated the same way.
  *
  * One table for both scopes, and the order is the order somebody walks
@@ -256,7 +256,7 @@ function harness(
  * repository is what an identity signs commits in and what an account receives
  * them from. The machine rows keep the order they already had, so a run with no
  * argument reports what it reported before. The project row is asked only where
- * there is a project — with no argument doctor drops it rather than guessing one.
+ * there is a project — with no argument chef drops it rather than guessing one.
  */
 const PASS: readonly PassSpec[] = [
   {
@@ -322,7 +322,7 @@ export function passItems(): PassSpec[] {
  *
  * Neither entry overrides `binary` per platform, and the registry tests hold
  * that. It is what lets the setup footer decide a harness is here with a single
- * `which` on `binary`, and still agree with the fuller lookup doctor runs
+ * `which` on `binary`, and still agree with the fuller lookup chef runs
  * through `probe.check`.
  */
 export function harnesses(): HarnessSpec[] {

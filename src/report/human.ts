@@ -1,7 +1,7 @@
 import { missingPrerequisites, rows as pair } from "../gaps.ts";
 import type {
   CheckResult,
-  DoctorProject,
+  ChefProject,
   Guidance,
   PassResult,
   PassSpec,
@@ -27,10 +27,10 @@ export type HumanReportInput = {
   pass?: readonly PassResult[];
   /**
    * The project this run was given, and what its harness side still owes.
-   * Absent when doctor was given no path, which is when it read the machine
+   * Absent when chef was given no path, which is when it read the machine
    * alone (docs/adr/0027).
    */
-  project?: DoctorProject;
+  project?: ChefProject;
 };
 
 /** Flattens guidance into one line. For command guidance the command is the text. */
@@ -75,7 +75,7 @@ export function renderHuman(input: HumanReportInput): string {
   // which directory they are about. As it was given and not resolved, which is
   // where `prep setup · <root>` already stands — a run told `.` is told `.` back
   // by both. A run with no project says nothing extra.
-  const heading = project ? `prep doctor · ${platform} · ${project.root}` : `prep doctor · ${platform}`;
+  const heading = project ? `prep chef · ${platform} · ${project.root}` : `prep chef · ${platform}`;
   const lines: string[] = [heading];
 
   if (suppressCommands) {
@@ -142,7 +142,7 @@ export function renderHuman(input: HumanReportInput): string {
 
   // What the project owes its harness, read by the same function setup's report
   // reads. Framed as the project's debt rather than as what a run just left
-  // behind: doctor wrote nothing here, so it has no run of its own to set the
+  // behind: chef wrote nothing here, so it has no run of its own to set the
   // rows against (docs/adr/0027).
   if (project && project.handoff.length > 0) {
     lines.push("", `Handoff (${project.handoff.length}) — owed to this project`);

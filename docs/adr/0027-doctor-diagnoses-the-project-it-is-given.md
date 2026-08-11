@@ -2,7 +2,10 @@
 
 **Date:** 2026-08-11
 **Status:** Accepted — amends ADR-0010 decision 5 and the scope sentence in
-`scripts/CONTEXT.md`
+`scripts/CONTEXT.md`. **The subcommand this record calls `doctor` is named
+`chef`, and `prep doctor` no longer runs** (ADR-0029). The axis below stands as
+drawn — purpose and not scope — but its headline reads **chef reads, setup
+writes** now: the verb was chosen for a name that has gone.
 **Sources:** ADR-0009, ADR-0010, ADR-0026
 
 ## Context

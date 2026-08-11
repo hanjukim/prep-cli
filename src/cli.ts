@@ -24,7 +24,7 @@ import type {
   Artifact,
   CheckFn,
   ConflictSide,
-  DoctorProject,
+  ChefProject,
   MergePlan,
   SettingsArtifact,
   SetupFs,
@@ -37,12 +37,12 @@ export type RunDeps = {
   /** A platform string used instead of detection. Lets tests cover macOS and Linux without either machine. */
   platformName?: string;
   /**
-   * How the machine is read. doctor checks every tool through it; setup asks it
+   * How the machine is read. chef checks every tool through it; setup asks it
    * for the language server a plugin points at and for the harness that is here.
    */
   which?: WhichFn;
   /**
-   * How doctor asks the fixed read-only pass checks (docs/adr/0026). Tests
+   * How chef asks the fixed read-only pass checks (docs/adr/0026). Tests
    * replace it the way they replace `which`, so no test starts a real process.
    */
   check?: CheckFn;
@@ -53,7 +53,7 @@ export type RunDeps = {
    */
   progress?: (text: string) => void;
   /**
-   * File system access. setup writes through it; doctor reads the project it is
+   * File system access. setup writes through it; chef reads the project it is
    * given through it, and reads nothing at all without one.
    *
    * Tests replace it with a fake.
@@ -62,7 +62,7 @@ export type RunDeps = {
   /** Where the harness's install record lives. Tests replace it, so no real home directory is read. */
   home?: string;
   /**
-   * The directory setup falls back to when no path is given. doctor has no such
+   * The directory setup falls back to when no path is given. chef has no such
    * fallback — it never guesses which project it is in (docs/adr/0027).
    */
   cwd?: string;
@@ -74,23 +74,23 @@ export type RunResult = { stdout: string; stderr: string; exitCode: number };
 
 /**
  * Exit codes. 1 is the ordinary observation both subcommands report — gaps for
- * doctor, nothing to write for setup — and stays apart from a tool failure.
+ * chef, nothing to write for setup — and stays apart from a tool failure.
  */
 const EXIT_OK = 0;
 const EXIT_OBSERVED = 1;
 const EXIT_ERROR = 2;
 
 const USAGE = [
-  "Usage: prep doctor [path] [--json]",
+  "Usage: prep chef [path] [--json]",
   "       prep setup [path] [--dry-run] [--json]",
   "",
-  "  doctor    Check this machine for the prerequisite package manager, the standard tools, and",
+  "  chef      Check this machine for the prerequisite package manager, the standard tools, and",
   "            the agent CLIs. Every gap is reported with what closes it; prep installs nothing.",
   "            It also asks a few fixed read-only questions — GitHub login, git identity, and a",
   "            login per installed agent CLI — and reports what only you can close.",
-  "            Given a path, it diagnoses that project as well: whether the directory is a git",
+  "            Given a path, it reads that project as well: whether the directory is a git",
   "            repository, and what the agent CLI still owes it. With no path it reads the",
-  "            machine alone — doctor never guesses which project you are in.",
+  "            machine alone — chef never guesses which project you are in.",
   "  setup     Write the project type's Bash allowlist as permission files, one per agent CLI",
   "            installed here: .claude/settings.json for Claude Code, .codex/config.toml for Codex.",
   "            Seed AGENTS.md where no guidance file exists yet, and point Claude Code at it.",
@@ -101,7 +101,7 @@ const USAGE = [
   "  --json      Print the report as is, instead of the human wording.",
   "  --dry-run   setup only. Show what would be written without writing it.",
   "",
-  "Exit codes: 0 done · 1 doctor found gaps, or setup wrote nothing · 2 tool error",
+  "Exit codes: 0 done · 1 chef found gaps, or setup wrote nothing · 2 tool error",
 ].join("\n");
 
 function usage(): RunResult {
@@ -141,11 +141,11 @@ export async function run(argv: readonly string[], deps: RunDeps = {}): Promise<
 
   if (command === undefined) return fail("A subcommand is required.");
 
-  if (command === "doctor") {
+  if (command === "chef") {
     // A flag that does nothing here would read as accepted. Say so instead.
     if (dryRun) return fail("--dry-run applies to setup only.");
-    if (operands.length > 1) return fail(`doctor takes one path at most: ${operands.join(" ")}`);
-    return doctor(deps, { path: operands[0], json });
+    if (operands.length > 1) return fail(`chef takes one path at most: ${operands.join(" ")}`);
+    return chef(deps, { path: operands[0], json });
   }
 
   if (command === "setup") {
@@ -156,9 +156,9 @@ export async function run(argv: readonly string[], deps: RunDeps = {}): Promise<
   return fail(`Unknown subcommand: ${command}`);
 }
 
-type DoctorOptions = { path?: string; json: boolean };
+type ChefOptions = { path?: string; json: boolean };
 
-async function doctor(deps: RunDeps, options: DoctorOptions): Promise<RunResult> {
+async function chef(deps: RunDeps, options: ChefOptions): Promise<RunResult> {
   let platform;
   try {
     platform = detectPlatform(deps.platformName ?? process.platform);
@@ -176,9 +176,9 @@ async function doctor(deps: RunDeps, options: DoctorOptions): Promise<RunResult>
 
   // Read before anything is asked of the machine, and only where a path was
   // given: a mistyped path should be answered at once rather than after five
-  // seconds of network checks. With no path nothing here runs, so doctor opens
+  // seconds of network checks. With no path nothing here runs, so chef opens
   // no directory it was not handed (docs/adr/0027).
-  let project: DoctorProject | null = null;
+  let project: ChefProject | null = null;
   if (options.path !== undefined) {
     try {
       requireDirectory(options.path, fs);
@@ -199,7 +199,7 @@ async function doctor(deps: RunDeps, options: DoctorOptions): Promise<RunResult>
   const specs = all();
   const which = deps.which ?? bunWhich;
   // A read on every path, and beyond the PATH reads only the fixed pass checks
-  // below (docs/adr/0010, narrowed by docs/adr/0026). doctor asks no question,
+  // below (docs/adr/0010, narrowed by docs/adr/0026). chef asks no question,
   // so there is no interactive branch: a run reading from a pipe and a run at a
   // terminal do the same work.
   const results = checkAll(specs, platform, which);
@@ -304,7 +304,7 @@ export function approve(outcome: SetupOutcome, prompt: SetupPrompt, deps: RunDep
  * What a setup run exits on, read off the files it produced.
  *
  * Writing nothing is a normal observation, not a failure — the same split
- * doctor draws between gaps and errors. A dry run is the exception: it was
+ * chef draws between gaps and errors. A dry run is the exception: it was
  * asked for a plan and it produced one, so it succeeded.
  *
  * With several files, one written file is enough for 0. A run that wrote one
@@ -342,7 +342,7 @@ function setup(deps: RunDeps, options: SetupOptions): RunResult {
     if (askable) outcome = approve(outcome, deps.prompt!, deps);
   } catch (error) {
     if (error instanceof SetupError) {
-      // Errors stay plain text on stderr even under --json, the same as doctor.
+      // Errors stay plain text on stderr even under --json, the same as chef.
       // Exit code 2 already carries the failure.
       return { stdout: "", stderr: `${error.message}\n`, exitCode: EXIT_ERROR };
     }

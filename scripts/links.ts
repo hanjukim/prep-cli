@@ -5,11 +5,11 @@
  * their own. `fd-find` installs `fdfind`, and `bat` installs `batcat`, because
  * both names were taken by packages that were there first. Installing the
  * package leaves a machine that holds the tool and answers to nothing anybody
- * types, so `prep doctor` reports it as a gap like any other (docs/adr/0023) and
+ * types, so `prep chef` reports it as a gap like any other (docs/adr/0023) and
  * something has to put the name there.
  *
  * That something is one step of the bootstrap script, and this is what it reads:
- * a `prep doctor --json` report in, one pair per line out — the name a machine
+ * a `prep chef --json` report in, one pair per line out — the name a machine
  * owes, and the name this platform's package ships it under. Both names come off
  * the registry entry, so a third tool renamed one day needs nothing written here
  * (docs/adr/0025).
@@ -20,8 +20,8 @@
  * one definition of what counts as installed (`have` in the script knows what to
  * make of a WSL answer).
  *
- * Reading stdin rather than running `prep doctor` itself matches the gap reader
- * beside it: the process tree stays flat, and the shell keeps doctor's exit code
+ * Reading stdin rather than running `prep chef` itself matches the gap reader
+ * beside it: the process tree stays flat, and the shell keeps chef's exit code
  * — which is 1 whenever anything is still missing.
  */
 
@@ -77,7 +77,7 @@ function toEntry(value: unknown): Entry | null {
 export function renamedLinks(report: unknown): Link[] {
   if (!isRecord(report) || !Array.isArray(report.results)) {
     throw new Error(
-      "prep doctor --json carried no results array. The contract this script reads has moved.",
+      "prep chef --json carried no results array. The contract this script reads has moved.",
     );
   }
 
@@ -87,7 +87,7 @@ export function renamedLinks(report: unknown): Link[] {
     const entry = toEntry(value);
     if (entry === null) {
       throw new Error(
-        `prep doctor --json carried an entry this script cannot read: ${JSON.stringify(value)}`,
+        `prep chef --json carried an entry this script cannot read: ${JSON.stringify(value)}`,
       );
     }
 

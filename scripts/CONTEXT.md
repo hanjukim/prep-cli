@@ -5,7 +5,7 @@ prep exists on their machine. The script sits outside prep on purpose
 (docs/adr/0009): it shares no code with anything prep exports, and it is the
 only part of this repository somebody meets before installing anything.
 
-prep's own vocabulary — `preset`, `gap`, `setup`, `doctor`, `harness` and the
+prep's own vocabulary — `preset`, `gap`, `setup`, `chef`, `harness` and the
 rest — is in `CONTEXT.md` at the root, and this file uses those terms as they
 are defined there. The reverse is not true: the root glossary names this script
 once. `CONTEXT-MAP.md` says which of the two to read.
@@ -20,7 +20,7 @@ Claude Code, and prep itself, and then, on the way to the project alone, a
 GitHub login and a git identity. prep cannot build the world that precedes it,
 so the script takes that place.
 
-The script opens the chain, reads `prep doctor --json` to close the gaps that
+The script opens the chain, reads `prep chef --json` to close the gaps that
 are left, and then, if it has one to clone, clones the prepared repository and
 runs `prep setup` in it. Which repository that is is the one thing it cannot
 work out for itself, and **the script asks last, where the answer is used**, so
@@ -61,7 +61,7 @@ branch only.** prep's own repository stopped needing it when it was published
 it, so it now sits inside the project step, after the repository has been named
 and only when that repository is on github.com (docs/adr/0021). A run that names
 no project meets no login at all, and neither does a project hosted elsewhere.
-Codex is not in the chain — doctor names it as a gap and a person
+Codex is not in the chain — chef names it as a gap and a person
 installs it. So the harness install command lives in two places: the script
 holds the one that opens the chain, the registry holds the advice the report
 prints.
@@ -97,7 +97,7 @@ mid-run on the project branch, where a clone needs it.
 prep.** Both of those answers were once the ending's: it asked
 `gh auth status` and `git config --get` in its own shell and named whichever came
 back empty. prep reads both now, as **pass** items, and the harness logins with
-them (docs/adr/0026), so the ending names neither and points at `prep doctor`
+them (docs/adr/0026), so the ending names neither and points at `prep chef`
 instead (docs/adr/0027). The rule that moved them is the one the tool list already
 follows — **prep decides and the script executes.** Two actors answering the same
 question are two answers free to drift, and on the day they differ nobody can say
@@ -113,8 +113,8 @@ wording says it in both places — `claude_login_note` — and it names the acco
 the login needs, since Claude Code carries a paid plan only. Codex's own login is
 named on the ending because the script never installs Codex, so a run ends with
 the machine holding none — and a login question about a harness that is not there
-is the one question doctor does not ask, since its rows are gated on the harness
-being installed (docs/adr/0026). Once somebody installs it, doctor names the
+is the one question chef does not ask, since its rows are gated on the harness
+being installed (docs/adr/0026). Once somebody installs it, chef names the
 login from then on. Nothing about it is waiting on a browser this trip.
 
 **The ending names one next action, and prints everything else as reference.**
@@ -205,7 +205,7 @@ written into a rc is worse than a line somebody adapts (docs/adr/0024).
 its rc before any of this existed, so a command named for a person to run
 themselves is named by its full path — `$GH_BIN auth login`, not `gh auth login`.
 That works for one command and does not carry: by the time somebody wants
-`prep doctor` or `claude` in that terminal, writing every name out in full is
+`prep chef` or `claude` in that terminal, writing every name out in full is
 worse than handing the PATH over once. A script cannot do it for them: the
 environment is copied when the shell forks, so what this run exports dies with
 it and the only way into that terminal is the parent shell running something
@@ -273,19 +273,19 @@ run that lost a whole machine to one is what that costs, and it happened.
 **Only the script changes the machine.** prep starts nothing but the fixed
 read-only questions its **pass** items ask — `gh auth status`, `git config
 --get` — and changes nothing on any path (docs/adr/0010, narrowed by
-docs/adr/0026). doctor reads, decides, and reports, naming a command or a
+docs/adr/0026). chef reads, decides, and reports, naming a command or a
 document for each gap. That is why `sudo` is not prep's question — a shell
 script running it is ordinary, and a tool that closes secrets with `deny` never
 ends up asking for root in the same run.
 
 The script does not decide what prep decides. prep's two subcommands divide on
-purpose and not on scope: **doctor diagnoses, setup writes** (docs/adr/0027).
-doctor reads the machine on its own, and the project as well when it is handed
+purpose and not on scope: **chef reads, setup writes** (docs/adr/0027).
+chef reads the machine on its own, and the project as well when it is handed
 one; setup writes a project's files. The script calls each for what it is for,
 executes what it reports, and adds no judgement of its own.
 
-The one call the script makes is `prep doctor --json` at step 8, and it names no
+The one call the script makes is `prep chef --json` at step 8, and it names no
 path. That is before step 9 asks for a project, so there is no project to name
-yet — the answer is the machine, exactly as it was before doctor could read a
+yet — the answer is the machine, exactly as it was before chef could read a
 project at all.
 _Avoid_: installer, wizard, provisioning

@@ -45,7 +45,7 @@ const MARKETPLACE = "claude-plugins-official";
  * Each entry carries a binary because that is what the plugin actually is: the
  * marketplace holds a `lspServers` block naming a command and the extensions it
  * answers for, and nothing else — no server, no installer. The command is an
- * ordinary tool a person installs, so prep names it the same way doctor names
+ * ordinary tool a person installs, so prep names it the same way chef names
  * ripgrep.
  */
 const PLUGINS: readonly PluginSpec[] = [
@@ -72,7 +72,7 @@ export function pluginId(plugin: PluginRef): string {
   return `${plugin.name}@${plugin.marketplace}`;
 }
 
-/** The command a person runs to install one. Shown and never run, the same as doctor's. */
+/** The command a person runs to install one. Shown and never run, the same as chef's. */
 export function installCommand(plugin: PluginRef): string {
   return `claude plugin install ${pluginId(plugin)}`;
 }
@@ -192,7 +192,7 @@ export type RecommendInput = {
   /** The settings file's plugin block, as it stands. Absent when the file has none, or has no file. */
   enabled?: unknown;
   installed: readonly InstalledPlugin[];
-  /** How the language server executable is looked up. The same seam doctor probes through. */
+  /** How the language server executable is looked up. The same seam chef probes through. */
   which: WhichFn;
 };
 

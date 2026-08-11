@@ -429,7 +429,7 @@ describe("dry run", () => {
   test("still points at the machine — what is owed is true before anything is written", () => {
     const { fs } = fakeFs([PACKAGE_JSON]);
     const outcome = setup({ root: ROOT, dryRun: true, fs });
-    expect(outcome.next.map((step) => step.id)).toContain("doctor");
+    expect(outcome.next.map((step) => step.id)).toContain("chef");
   });
 });
 
@@ -438,7 +438,7 @@ describe("the machine pointer", () => {
     const { fs } = fakeFs([PACKAGE_JSON]);
     setup({ root: ROOT, fs });
     const second = setup({ root: ROOT, fs });
-    expect(second.next.map((step) => step.id)).toContain("doctor");
+    expect(second.next.map((step) => step.id)).toContain("chef");
   });
 });
 

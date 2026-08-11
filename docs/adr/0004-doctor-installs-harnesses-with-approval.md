@@ -2,7 +2,10 @@
 
 **Date:** 2026-08-01
 **Status:** Superseded — replaced by ADR-0010 (prep starts no process, and the
-bootstrap script is the only thing that changes the machine)
+bootstrap script is the only thing that changes the machine). The subcommand this
+record calls `doctor` was also renamed to `chef` afterwards, and `prep doctor` no
+longer runs (ADR-0029) — which changes nothing here, since what this record
+proposed had already gone.
 **Sources:** ticket #34, follow-ups #35 and #36
 
 ## Context

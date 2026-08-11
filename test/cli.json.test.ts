@@ -11,7 +11,7 @@ const RECORD = "/home/.claude/plugins/installed_plugins.json";
 const SERVERS_FOUND: WhichFn = (binary) => `/usr/bin/${binary}`;
 
 function run(argv: readonly string[], deps: RunDeps = {}): Promise<RunResult> {
-  // The check fake answers yes to everything, so doctor's pass half is a
+  // The check fake answers yes to everything, so chef's pass half is a
   // constant here and no test starts a real process.
   return runCli(argv, { home: HOME, which: SERVERS_FOUND, check: () => true, ...deps });
 }
@@ -40,19 +40,19 @@ async function json(argv: readonly string[], platformName: string, which: WhichF
 
 describe("--json exit codes", () => {
   test("no gaps is 0", async () => {
-    const { result } = await json(["doctor", "--json"], "darwin", FOUND_ALL);
+    const { result } = await json(["chef", "--json"], "darwin", FOUND_ALL);
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe("");
   });
 
   test("gaps found is 1", async () => {
-    const { result } = await json(["doctor", "--json"], "darwin", FOUND_NONE);
+    const { result } = await json(["chef", "--json"], "darwin", FOUND_NONE);
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toBe("");
   });
 
   test("an unsupported OS is 2 with empty stdout", async () => {
-    const result = await run(["doctor", "--json"], { platformName: "win32", which: FOUND_NONE });
+    const result = await run(["chef", "--json"], { platformName: "win32", which: FOUND_NONE });
     expect(result.exitCode).toBe(2);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("WSL");
@@ -66,8 +66,8 @@ describe("--json exit codes", () => {
       ["linux", FOUND_NONE],
       ["win32", FOUND_NONE],
     ] as const) {
-      const human = await run(["doctor"], { platformName, which });
-      const machine = await run(["doctor", "--json"], { platformName, which });
+      const human = await run(["chef"], { platformName, which });
+      const machine = await run(["chef", "--json"], { platformName, which });
       expect(machine.exitCode).toBe(human.exitCode);
     }
   });
@@ -75,45 +75,45 @@ describe("--json exit codes", () => {
 
 describe("--json output", () => {
   test("stdout parses whole as JSON", async () => {
-    const { payload } = await json(["doctor", "--json"], "linux", FOUND_ALL);
+    const { payload } = await json(["chef", "--json"], "linux", FOUND_ALL);
     expect(payload?.platform).toBe("linux");
     expect(payload?.results.length).toBeGreaterThan(0);
   });
 
   test("the harnesses are reported alongside the standard tools", async () => {
-    const { payload } = await json(["doctor", "--json"], "linux", FOUND_ALL);
+    const { payload } = await json(["chef", "--json"], "linux", FOUND_ALL);
     const ids = payload?.results.map((result) => result.id);
     expect(ids).toContain("claude-code");
     expect(ids).toContain("codex");
   });
 
   test("the detected platform is carried through", async () => {
-    expect((await json(["doctor", "--json"], "darwin", FOUND_NONE)).payload?.platform).toBe("darwin");
-    expect((await json(["doctor", "--json"], "linux", FOUND_NONE)).payload?.platform).toBe("linux");
+    expect((await json(["chef", "--json"], "darwin", FOUND_NONE)).payload?.platform).toBe("darwin");
+    expect((await json(["chef", "--json"], "linux", FOUND_NONE)).payload?.platform).toBe("linux");
   });
 
   test("no human symbols or summary wording leak in", async () => {
-    const { result } = await json(["doctor", "--json"], "darwin", FOUND_NONE);
-    for (const noise of ["✓", "✗", "⚠", "prep doctor ·", "Installed", "prep does not install"]) {
+    const { result } = await json(["chef", "--json"], "darwin", FOUND_NONE);
+    for (const noise of ["✓", "✗", "⚠", "prep chef ·", "Installed", "prep does not install"]) {
       expect(result.stdout).not.toContain(noise);
     }
   });
 
   test("flag order does not matter", async () => {
-    const after = await run(["doctor", "--json"], { platformName: "darwin", which: FOUND_ALL });
-    const before = await run(["--json", "doctor"], { platformName: "darwin", which: FOUND_ALL });
+    const after = await run(["chef", "--json"], { platformName: "darwin", which: FOUND_ALL });
+    const before = await run(["--json", "chef"], { platformName: "darwin", which: FOUND_ALL });
     expect(before).toEqual(after);
   });
 
   test("same input gives same output and same exit code", async () => {
     const deps = { platformName: "linux", which: FOUND_ALL };
-    expect(await run(["doctor", "--json"], deps)).toEqual(await run(["doctor", "--json"], deps));
+    expect(await run(["chef", "--json"], deps)).toEqual(await run(["chef", "--json"], deps));
   });
 });
 
 describe("--json pass", () => {
   test("carries the pass items for the harnesses this machine holds", async () => {
-    const { payload } = await json(["doctor", "--json"], "darwin", FOUND_ALL);
+    const { payload } = await json(["chef", "--json"], "darwin", FOUND_ALL);
     expect(payload?.pass.map((item) => item.id)).toEqual([
       "github-login",
       "git-identity",
@@ -124,12 +124,12 @@ describe("--json pass", () => {
   });
 
   test("with no harness, only the two machine rows arrive", async () => {
-    const { payload } = await json(["doctor", "--json"], "darwin", FOUND_NONE);
+    const { payload } = await json(["chef", "--json"], "darwin", FOUND_NONE);
     expect(payload?.pass.map((item) => item.id)).toEqual(["github-login", "git-identity"]);
   });
 
   test("an unanswered check comes through as unknown, with its command", async () => {
-    const result = await run(["doctor", "--json"], {
+    const result = await run(["chef", "--json"], {
       platformName: "darwin",
       which: FOUND_ALL,
       check: () => null,
@@ -140,7 +140,7 @@ describe("--json pass", () => {
   });
 
   test("pass items never move the exit code, in either direction", async () => {
-    const missing = await run(["doctor", "--json"], {
+    const missing = await run(["chef", "--json"], {
       platformName: "darwin",
       which: FOUND_ALL,
       check: () => false,
@@ -149,7 +149,7 @@ describe("--json pass", () => {
   });
 
   test("no account identifier can appear — the entry is status and commands only", async () => {
-    const { payload } = await json(["doctor", "--json"], "darwin", FOUND_ALL);
+    const { payload } = await json(["chef", "--json"], "darwin", FOUND_ALL);
     for (const item of payload!.pass) {
       expect(Object.keys(item)).toEqual(["id", "status", "checks", "guidance"]);
     }
@@ -201,7 +201,7 @@ const SEEDED = {
 };
 
 describe("--json with a project", () => {
-  async function doctorJson(argv: readonly string[], fs: SetupFs) {
+  async function chefJson(argv: readonly string[], fs: SetupFs) {
     const result = await run(argv, { platformName: "darwin", which: FOUND_ALL, fs });
     return { result, payload: result.stdout ? (JSON.parse(result.stdout) as Payload) : null };
   }
@@ -209,12 +209,12 @@ describe("--json with a project", () => {
   test("with no path, neither project key is emitted at all", async () => {
     // The absence is the answer. An empty `handoff` would read as a project that
     // owes nothing, and the bootstrap script's own step-8 call names no path.
-    const { payload } = await json(["doctor", "--json"], "darwin", FOUND_ALL);
+    const { payload } = await json(["chef", "--json"], "darwin", FOUND_ALL);
     expect(Object.keys(payload!)).toEqual(["platform", "results", "pass"]);
   });
 
   test("with a path, the root and the handoff come through", async () => {
-    const { payload } = await doctorJson(["doctor", "--json", PROJECT], fakeFs([PROJECT]));
+    const { payload } = await chefJson(["chef", "--json", PROJECT], fakeFs([PROJECT]));
     expect(payload?.root).toBe(PROJECT);
     expect(payload?.handoff?.map((entry) => entry.id)).toEqual([
       "language",
@@ -225,14 +225,14 @@ describe("--json with a project", () => {
   });
 
   test("a handoff entry is the same three fields the setup contract carries", async () => {
-    const { payload } = await doctorJson(["doctor", "--json", PROJECT], fakeFs([PROJECT], SEEDED));
+    const { payload } = await chefJson(["chef", "--json", PROJECT], fakeFs([PROJECT], SEEDED));
     for (const entry of payload!.handoff!) {
       expect(Object.keys(entry)).toEqual(["id", "status", "path"]);
     }
   });
 
   test("the project row joins the pass array, ahead of the machine rows", async () => {
-    const { payload } = await doctorJson(["doctor", "--json", PROJECT], fakeFs([PROJECT]));
+    const { payload } = await chefJson(["chef", "--json", PROJECT], fakeFs([PROJECT]));
     expect(payload?.pass.map((item) => item.id)).toEqual([
       "git-repository",
       "github-login",
@@ -247,30 +247,30 @@ describe("--json with a project", () => {
 
   test("a repository reads ready on that row", async () => {
     const fs = fakeFs([PROJECT, "/project/.git"]);
-    const { payload } = await doctorJson(["doctor", "--json", PROJECT], fs);
+    const { payload } = await chefJson(["chef", "--json", PROJECT], fs);
     expect(payload?.pass[0]).toMatchObject({ id: "git-repository", status: "ready" });
   });
 
   test("an unusable path is plain text on stderr, with empty stdout", async () => {
-    const { result } = await doctorJson(["doctor", "--json", "/nowhere"], fakeFs([PROJECT]));
+    const { result } = await chefJson(["chef", "--json", "/nowhere"], fakeFs([PROJECT]));
     expect(result.exitCode).toBe(2);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("Not a project directory: /nowhere");
   });
 
   test("the project half moves no exit code", async () => {
-    const { result } = await doctorJson(["doctor", "--json", PROJECT], fakeFs([PROJECT]));
+    const { result } = await chefJson(["chef", "--json", PROJECT], fakeFs([PROJECT]));
     expect(result.exitCode).toBe(0);
   });
 
   test("the human report and the machine report agree on the exit code", async () => {
     for (const present of [[PROJECT], [PROJECT, "/project/.git"]]) {
-      const human = await run(["doctor", PROJECT], {
+      const human = await run(["chef", PROJECT], {
         platformName: "darwin",
         which: FOUND_ALL,
         fs: fakeFs(present),
       });
-      const machine = await run(["doctor", "--json", PROJECT], {
+      const machine = await run(["chef", "--json", PROJECT], {
         platformName: "darwin",
         which: FOUND_ALL,
         fs: fakeFs(present),
@@ -486,30 +486,30 @@ describe("setup --json", () => {
 
 describe("the human path is untouched", () => {
   test("without --json the human output appears", async () => {
-    const result = await run(["doctor"], { platformName: "darwin", which: FOUND_NONE });
-    expect(result.stdout).toContain("prep doctor · darwin");
+    const result = await run(["chef"], { platformName: "darwin", which: FOUND_NONE });
+    expect(result.stdout).toContain("prep chef · darwin");
     expect(() => JSON.parse(result.stdout)).toThrow();
   });
 });
 
 describe("unknown flags", () => {
   test("gives exit code 2 and the usage text", async () => {
-    const result = await run(["doctor", "--verbose"], { platformName: "darwin", which: FOUND_ALL });
+    const result = await run(["chef", "--verbose"], { platformName: "darwin", which: FOUND_ALL });
     expect(result.exitCode).toBe(2);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("--verbose");
-    expect(result.stderr).toContain("prep doctor");
+    expect(result.stderr).toContain("prep chef");
   });
 
   test("short flags are blocked too", async () => {
-    const result = await run(["doctor", "-j"], { platformName: "darwin", which: FOUND_ALL });
+    const result = await run(["chef", "-j"], { platformName: "darwin", which: FOUND_ALL });
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain("-j");
   });
 
   test("--help wins over --json", async () => {
-    const result = await run(["doctor", "--json", "--help"], { platformName: "darwin", which: FOUND_ALL });
+    const result = await run(["chef", "--json", "--help"], { platformName: "darwin", which: FOUND_ALL });
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("prep doctor");
+    expect(result.stdout).toContain("prep chef");
   });
 });

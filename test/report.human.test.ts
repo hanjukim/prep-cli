@@ -302,8 +302,8 @@ describe("human report content", () => {
   });
 
   test("the header carries the detected platform", () => {
-    expect(render("darwin", {}).split("\n")[0]).toBe("prep doctor · darwin");
-    expect(render("linux", {}).split("\n")[0]).toBe("prep doctor · linux");
+    expect(render("darwin", {}).split("\n")[0]).toBe("prep chef · darwin");
+    expect(render("linux", {}).split("\n")[0]).toBe("prep chef · linux");
   });
 });
 
@@ -409,12 +409,12 @@ describe("the project section", () => {
   }
 
   test("with no project, the header names the platform alone", () => {
-    expect(render("darwin", { ...BREW, ...FULL_DARWIN }).split("\n")[0]).toBe("prep doctor · darwin");
+    expect(render("darwin", { ...BREW, ...FULL_DARWIN }).split("\n")[0]).toBe("prep chef · darwin");
   });
 
   test("with a project, the header names it — the rows cannot say which directory they are about", () => {
     const output = renderWithProject([handoffItem("language", "ready", "AGENTS.md")]);
-    expect(output.split("\n")[0]).toBe(`prep doctor · darwin · ${ROOT}`);
+    expect(output.split("\n")[0]).toBe(`prep chef · darwin · ${ROOT}`);
   });
 
   test("with no project, no handoff section opens", () => {
@@ -437,7 +437,7 @@ describe("the project section", () => {
   test("the section is framed as the project's debt, not as what this run left behind", () => {
     const output = renderWithProject([handoffItem("domain-docs", "missing", null)]);
     expect(output).toContain("owed to this project");
-    // doctor wrote nothing, so it has nothing of its own to set the rows against.
+    // chef wrote nothing, so it has nothing of its own to set the rows against.
     expect(output).not.toContain("still owed.");
     expect(output).not.toContain("Nothing owed.");
   });

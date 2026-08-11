@@ -361,7 +361,7 @@ describe("the JSON report", () => {
       handoff: UNTOUCHED,
       next: [
         { id: "harness", command: CLAUDE_COMMAND, alternative: CODEX_COMMAND },
-        { id: "doctor", command: "prep doctor", alternative: null },
+        { id: "chef", command: "prep chef", alternative: null },
       ],
     });
   });
@@ -768,12 +768,14 @@ describe("what to run next", () => {
   test("each command is shown with why it is worth running", () => {
     const text = human(APPLIED);
     expect(text).toContain(`${CLAUDE_COMMAND}  writes the guidance prep does not`);
-    expect(text).toContain("prep doctor                         reports what this machine");
+    // The gap between the two columns is whatever the longest command needs, so
+    // the assertion reads the pair rather than the padding a rename would shift.
+    expect(text).toMatch(/prep chef +reports what this machine/);
   });
 
   test("a run with nothing project-side to do still shows the machine step", () => {
     const settled = outcome("skipped", ["node"], null, null, SETTLED);
-    expect(settled.next.map((step) => step.id)).toEqual(["doctor"]);
+    expect(settled.next.map((step) => step.id)).toEqual(["chef"]);
     expect(human(settled)).toContain("Next (1)");
   });
 
@@ -794,7 +796,7 @@ describe("what to run next", () => {
 
   test("with no harness on the machine the block sends the person to install one", () => {
     const text = human(outcome("applied", ["node"], ["Bash(npm:*)"], null, UNTOUCHED, [], NO_HARNESS));
-    expect(text).toContain("prep doctor  no agent CLI here — install one first");
+    expect(text).toMatch(/prep chef +no agent CLI here — install one first/);
     // Nothing to paste at a harness that is not there.
     expect(text).not.toContain(CLAUDE_COMMAND);
     // And the machine check is not then repeated under its own reason.
@@ -809,7 +811,7 @@ describe("what to run next", () => {
     const payload = JSON.parse(renderSetupJson(APPLIED));
     expect(payload.next).toEqual([
       { id: "harness", command: CLAUDE_COMMAND, alternative: CODEX_COMMAND },
-      { id: "doctor", command: "prep doctor", alternative: null },
+      { id: "chef", command: "prep chef", alternative: null },
     ]);
     for (const noise of ["writes the guidance", "checks this machine"]) {
       expect(renderSetupJson(APPLIED)).not.toContain(noise);

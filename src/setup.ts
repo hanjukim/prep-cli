@@ -271,7 +271,7 @@ function produce<T>(make: () => T): T {
  * Which harness reads which of the files prep writes.
  *
  * Held here rather than on the registry entries: the registry is a table of what
- * a machine should hold, and doctor reads it without ever hearing about a
+ * a machine should hold, and chef reads it without ever hearing about a
  * project. Which file a project needs is setup's question.
  */
 const CLAUDE_CODE: HarnessId = "claude-code";
@@ -285,7 +285,7 @@ const CODEX: HarnessId = "codex";
  * `which` per entry, the same one the footer uses to pick a handoff command.
  *
  * With no harness at all, the Claude files are written anyway. The project still
- * needs the baseline somewhere, and the machine is one `prep doctor` away from
+ * needs the baseline somewhere, and the machine is one `prep chef` away from
  * holding a harness — whereas the project is only set up once, by whoever ran
  * this. Writing nothing would leave that person with neither.
  */

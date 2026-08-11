@@ -256,7 +256,7 @@ describe("the pass table", () => {
   test("every row is one of the two scopes, so the guards below cover the whole table", () => {
     // The guards that follow read one scope each. Without this, a row of a third
     // scope would escape both — and the table is the whole surface of what
-    // doctor may start (docs/adr/0026).
+    // chef may start (docs/adr/0026).
     expect(machineItems().length + projectItems().length).toBe(passItems().length);
   });
 

@@ -72,7 +72,7 @@ export function spawnChecker(timeoutMs: number = CHECK_TIMEOUT_MS): CheckFn {
   };
 }
 
-/** The default checker, at the real ceiling. doctor uses it when tests inject nothing. */
+/** The default checker, at the real ceiling. chef uses it when tests inject nothing. */
 export const spawnCheck: CheckFn = spawnChecker();
 
 /**
@@ -106,7 +106,7 @@ export function withProgress(
 /**
  * The project a run was given, and how to read it.
  *
- * Absent rather than empty when doctor was given no path, because the two say
+ * Absent rather than empty when chef was given no path, because the two say
  * different things: no project means the project rows were never asked, and a
  * project whose rows all came back missing is an answer.
  */
@@ -161,10 +161,10 @@ async function askMachineItem(
  * Two things take a row off the table, one per scope. A row gated on a harness is
  * skipped when the machine does not hold that harness — a login question for a
  * tool nobody installed has no useful answer. A project row is skipped when there
- * is no project, which is every run of `prep doctor` with no argument: doctor
+ * is no project, which is every run of `prep chef` with no argument: chef
  * does not guess which project it is in (docs/adr/0027).
  *
- * Which harnesses are here comes from the caller, off the same check doctor
+ * Which harnesses are here comes from the caller, off the same check chef
  * already ran, so this module never reads PATH itself.
  */
 export async function runPass(

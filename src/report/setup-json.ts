@@ -170,7 +170,7 @@ export function renderSetupJson(outcome: SetupOutcome): string {
       ...recommendation,
       server: { ...recommendation.server },
     })),
-    // Field by field, and in the same three fields doctor's contract emits
+    // Field by field, and in the same three fields chef's contract emits
     // (`src/report/json.ts`). Both reports read one `checkHandoff`, so a field
     // added to its result for prep's own use would otherwise reach whichever
     // contract spreads and not the one that picks — the two would part company

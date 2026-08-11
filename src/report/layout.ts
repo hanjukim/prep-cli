@@ -1,6 +1,6 @@
 /**
  * Column layout shared by the human reports. No knowledge of what is being
- * reported, so a new report reuses the alignment without dragging in doctor's
+ * reported, so a new report reuses the alignment without dragging in chef's
  * wording.
  */
 

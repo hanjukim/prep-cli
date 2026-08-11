@@ -1,7 +1,10 @@
 # ADR-0026: doctor asks fixed read-only questions
 
 **Date:** 2026-08-06
-**Status:** Accepted — narrows ADR-0010
+**Status:** Accepted — narrows ADR-0010. **The subcommand this record calls
+`doctor` is named `chef`, and `prep doctor` no longer runs** (ADR-0029). What is
+decided below is untouched; read every `doctor` here as `chef`. The **pass** this
+record introduced is what made the rename worth making.
 **Sources:** ADR-0010, ADR-0021, ADR-0022
 
 ## Context

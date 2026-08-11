@@ -46,7 +46,7 @@ function fakeWhich(found: Record<string, string>): WhichFn {
 }
 
 /** The report exactly as the script reads it: rendered by prep, parsed back from text. */
-function doctor(platform: Platform, found: Record<string, string>): unknown {
+function chef(platform: Platform, found: Record<string, string>): unknown {
   const results = checkAll(all(), platform, fakeWhich(found));
   return JSON.parse(renderJson({ platform, results }));
 }
@@ -62,7 +62,7 @@ const entry = (id: string, binary: string | null, renamed: string | null) => ({
 
 describe("renamedLinks", () => {
   test("pairs the canonical name with the name Debian shipped, off the real registry", () => {
-    expect(renamedLinks(doctor("linux", { apt: "/usr/bin/apt" }))).toEqual([
+    expect(renamedLinks(chef("linux", { apt: "/usr/bin/apt" }))).toEqual([
       { name: "fd", shipped: "fdfind" },
       { name: "bat", shipped: "batcat" },
     ]);
@@ -71,14 +71,14 @@ describe("renamedLinks", () => {
   // brew renames neither, so a macOS run reads a report that asks for nothing
   // and the link step does not run at all.
   test("says nothing at all about macOS", () => {
-    expect(renamedLinks(doctor("darwin", { brew: "/opt/homebrew/bin/brew" }))).toEqual([]);
+    expect(renamedLinks(chef("darwin", { brew: "/opt/homebrew/bin/brew" }))).toEqual([]);
   });
 
   // The report says a name was found, not which file answered it. A machine
   // holding bat from source and one holding a link an earlier run made read the
   // same here, so the question is left to the shell, right before it would write.
   test("asks for the pair whether the canonical name answers or not", () => {
-    const installed = doctor("linux", {
+    const installed = chef("linux", {
       apt: "/usr/bin/apt",
       bat: "/home/me/.local/bin/bat",
       fd: "/home/me/.local/bin/fd",

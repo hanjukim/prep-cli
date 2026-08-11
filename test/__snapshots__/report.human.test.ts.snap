@@ -1,7 +1,7 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
 exports[`human report snapshots macOS · with gaps 1`] = `
-"prep doctor · darwin
+"prep chef · darwin
 
 Prerequisites
   ✓ homebrew     /opt/homebrew/bin/brew
@@ -21,7 +21,7 @@ Gaps (5)
 `;
 
 exports[`human report snapshots macOS · no gaps 1`] = `
-"prep doctor · darwin
+"prep chef · darwin
 
 Prerequisites
   ✓ homebrew     /opt/homebrew/bin/brew
@@ -34,7 +34,7 @@ No gaps.
 `;
 
 exports[`human report snapshots macOS · prerequisite missing 1`] = `
-"prep doctor · darwin
+"prep chef · darwin
 
 ⚠ homebrew is missing. Install commands below are hidden — install this first.
 
@@ -56,7 +56,7 @@ Gaps (5)
 `;
 
 exports[`human report snapshots Linux · with gaps 1`] = `
-"prep doctor · linux
+"prep chef · linux
 
 Prerequisites
   ✓ apt          /usr/bin/apt
@@ -76,7 +76,7 @@ Gaps (5)
 `;
 
 exports[`human report snapshots Linux · no gaps 1`] = `
-"prep doctor · linux
+"prep chef · linux
 
 Prerequisites
   ✓ apt          /usr/bin/apt
@@ -89,7 +89,7 @@ No gaps.
 `;
 
 exports[`human report snapshots Linux · prerequisite missing 1`] = `
-"prep doctor · linux
+"prep chef · linux
 
 ⚠ apt is missing. Install commands below are hidden — install this first.
 
@@ -111,7 +111,7 @@ Gaps (5)
 `;
 
 exports[`human report snapshots with a not-applicable entry present 1`] = `
-"prep doctor · darwin
+"prep chef · darwin
 
 Prerequisites
   ✓ homebrew  /opt/homebrew/bin/brew
@@ -124,7 +124,7 @@ No gaps.
 `;
 
 exports[`the pass section a mixed pass renders every asked row 1`] = `
-"prep doctor · darwin
+"prep chef · darwin
 
 Prerequisites
   ✓ homebrew     /opt/homebrew/bin/brew
@@ -142,7 +142,7 @@ No gaps.
 `;
 
 exports[`the project section the handoff rows say what the project owes, each with its own reason 1`] = `
-"prep doctor · darwin · /home/me/work/project
+"prep chef · darwin · /home/me/work/project
 
 Prerequisites
   ✓ homebrew     /opt/homebrew/bin/brew

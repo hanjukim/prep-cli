@@ -125,8 +125,8 @@ export type PassItemId =
 /**
  * What answers a pass item.
  * - machine: a fixed read-only command, asked of the machine (docs/adr/0026).
- * - project: a path inside the project doctor was given. Asked only when there
- *   is a project — `prep doctor` with no argument never guesses one
+ * - project: a path inside the project chef was given. Asked only when there
+ *   is a project — `prep chef` with no argument never guesses one
  *   (docs/adr/0027).
  */
 export type PassScope = "machine" | "project";
@@ -291,7 +291,7 @@ export type PluginSpec = PluginRef & {
    * person installs, and neither the plugin nor prep puts it there.
    */
   binary: string;
-  /** How a person installs that executable. Shown, never run — the same level doctor holds to. */
+  /** How a person installs that executable. Shown, never run — the same level chef holds to. */
   install: string;
 };
 
@@ -447,7 +447,7 @@ export type MergePlan = {
  * and then nothing lands on disk.
  *
  * One type rather than a base and an extension, because merging an existing
- * settings file is the only thing prep asks about at all (docs/adr/0003). doctor
+ * settings file is the only thing prep asks about at all (docs/adr/0003). chef
  * asks nothing, so there is no second caller that needs a narrower shape.
  */
 export type SetupPrompt = {
@@ -487,7 +487,7 @@ export type HandoffResult = {
 };
 
 /**
- * The project a doctor run was given, and what reading it produced.
+ * The project a chef run was given, and what reading it produced.
  *
  * One type because the pair travels together to three places — the runner, the
  * human report, and the JSON contract — and each of them needs both halves: the
@@ -495,7 +495,7 @@ export type HandoffResult = {
  * rather than empty on a run with no path, since a project nobody named and a
  * project that owes nothing are different answers (docs/adr/0027).
  */
-export type DoctorProject = {
+export type ChefProject = {
   /** The project directory, as it was given. The same as `SetupOutcome.root`. */
   root: string;
   handoff: readonly HandoffResult[];
@@ -626,15 +626,15 @@ export type HarnessPresence = {
  *   be asked for it.
  * - install-harness: the same thing is owed, but nothing on this machine can be
  *   asked. The step turns into getting a harness first.
- * - doctor: the project is set up, so the machine is the next scope out.
+ * - chef: the project is set up, so the machine is the next scope out.
  */
-export type NextStepId = "approve" | "harness" | "install-harness" | "doctor";
+export type NextStepId = "approve" | "harness" | "install-harness" | "chef";
 
 /**
  * One thing to run after setup.
  *
  * The command and nothing else: why it is worth running is wording, and wording
- * lives in the report. This is level 2 intervention, the same as doctor's — a
+ * lives in the report. This is level 2 intervention, the same as chef's — a
  * verified command, run by a person (see `Guidance`).
  */
 export type NextStep = {

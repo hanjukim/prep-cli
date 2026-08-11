@@ -11,7 +11,7 @@ function fakeWhich(found: Record<string, string>): WhichFn {
 }
 
 /** The report exactly as the script reads it: rendered by prep, parsed back from text. */
-function doctor(platform: Platform, found: Record<string, string>): unknown {
+function chef(platform: Platform, found: Record<string, string>): unknown {
   const specs = all();
   const results = checkAll(specs, platform, fakeWhich(found));
   return JSON.parse(renderJson({ platform, results }));
@@ -28,7 +28,7 @@ const entry = (id: string, status: string, command?: string) => ({
 describe("installCommands", () => {
   test("names a command for every gap the report carries", () => {
     // Nothing but brew is here, so every standard tool is a gap with a command.
-    const commands = installCommands(doctor("darwin", { brew: "/opt/homebrew/bin/brew" }));
+    const commands = installCommands(chef("darwin", { brew: "/opt/homebrew/bin/brew" }));
     expect(commands).toContain("brew install ripgrep");
     expect(commands).toContain("xcode-select --install");
   });
@@ -43,7 +43,7 @@ describe("installCommands", () => {
   // commands have run (docs/adr/0025).
   test("carries the package command for a binary the distribution renamed", () => {
     const commands = installCommands(
-      doctor("linux", { apt: "/usr/bin/apt", batcat: "/usr/bin/batcat", fdfind: "/usr/bin/fdfind" }),
+      chef("linux", { apt: "/usr/bin/apt", batcat: "/usr/bin/batcat", fdfind: "/usr/bin/fdfind" }),
     );
     expect(commands).toContain("sudo apt install -y bat");
     expect(commands).toContain("sudo apt install -y fd-find");
@@ -52,21 +52,21 @@ describe("installCommands", () => {
 
   test("says nothing about a machine that already answers to bat and fd", () => {
     const commands = installCommands(
-      doctor("linux", { apt: "/usr/bin/apt", bat: "/home/me/.local/bin/bat", fd: "/home/me/.local/bin/fd" }),
+      chef("linux", { apt: "/usr/bin/apt", bat: "/home/me/.local/bin/bat", fd: "/home/me/.local/bin/fd" }),
     );
     expect(commands).not.toContain("sudo apt install -y bat");
     expect(commands).not.toContain("sudo apt install -y fd-find");
   });
 
   test("says nothing about a tool that is already here", () => {
-    const commands = installCommands(doctor("darwin", { brew: "b", rg: "/usr/bin/rg" }));
+    const commands = installCommands(chef("darwin", { brew: "b", rg: "/usr/bin/rg" }));
     expect(commands).not.toContain("brew install ripgrep");
   });
 
   test("leaves the harnesses out — one is a link in the chain, the other is a person's job", () => {
     // Nothing at all is installed, so both harnesses are missing, and on macOS
     // both carry a command the script would otherwise run.
-    const commands = installCommands(doctor("darwin", {}));
+    const commands = installCommands(chef("darwin", {}));
     for (const harness of harnesses()) {
       const guidance = harness.platforms.darwin?.guidance;
       if (guidance?.kind === "command") expect(commands).not.toContain(guidance.command);
@@ -75,7 +75,7 @@ describe("installCommands", () => {
 
   test("skips guidance with nothing to run", () => {
     // A prerequisite carries a note and a URL, never a command.
-    const commands = installCommands(doctor("darwin", {}));
+    const commands = installCommands(chef("darwin", {}));
     expect(commands.some((command) => command.includes("brew.sh"))).toBe(false);
   });
 

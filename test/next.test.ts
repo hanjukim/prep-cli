@@ -104,24 +104,24 @@ describe("what to run next", () => {
   });
 
   test("a run that wrote something offers the machine check", () => {
-    expect(ids(outcome("applied"))).toEqual(["doctor"]);
-    expect(ids(outcome("merged", PENDING))).toEqual(["doctor"]);
+    expect(ids(outcome("applied"))).toEqual(["chef"]);
+    expect(ids(outcome("merged", PENDING))).toEqual(["chef"]);
   });
 
   test("a run that wrote nothing offers it too — what is owed does not depend on this run", () => {
-    expect(ids(outcome("skipped"))).toEqual(["doctor"]);
-    expect(ids(outcome("declined", PENDING))).toEqual(["doctor"]);
+    expect(ids(outcome("skipped"))).toEqual(["chef"]);
+    expect(ids(outcome("declined", PENDING))).toEqual(["chef"]);
   });
 
   test("a run with nothing project-side to do still points at the machine", () => {
     expect(nextSteps(outcome("skipped"))).toEqual([
-      { id: "doctor", command: "prep doctor", alternative: null },
+      { id: "chef", command: "prep chef", alternative: null },
     ]);
   });
 
   test("the order is approve, then harness, then the machine", () => {
-    expect(ids(outcome("planned", PENDING, OWED))).toEqual(["approve", "harness", "doctor"]);
-    expect(ids(outcome("merged", PENDING, OWED))).toEqual(["harness", "doctor"]);
+    expect(ids(outcome("planned", PENDING, OWED))).toEqual(["approve", "harness", "chef"]);
+    expect(ids(outcome("merged", PENDING, OWED))).toEqual(["harness", "chef"]);
   });
 
   test("the command carries the root, so it can be run from anywhere", () => {
@@ -162,14 +162,14 @@ describe("the command that hands the project over", () => {
     // machine check is where a missing harness gets offered and installed.
     expect(step(owing, "install-harness", NEITHER)).toEqual({
       id: "install-harness",
-      command: "prep doctor",
+      command: "prep chef",
       alternative: null,
     });
     expect(ids(owing, NEITHER)).not.toContain("harness");
   });
 
   test("being sent to the machine check does not put the same command twice", () => {
-    // The doctor step would be the same command under a second reason, so the
+    // The chef step would be the same command under a second reason, so the
     // install step absorbs it.
     expect(ids(owing, NEITHER)).toEqual(["install-harness"]);
   });
@@ -177,7 +177,7 @@ describe("the command that hands the project over", () => {
   test("a run that wrote nothing names the harness too — what is owed was read either way", () => {
     expect(ids(outcome("planned", null, OWED), holding("claude-code"))).toEqual([
       "harness",
-      "doctor",
+      "chef",
     ]);
   });
 });

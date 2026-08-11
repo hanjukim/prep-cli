@@ -118,7 +118,7 @@ describe("registry", () => {
   });
 
   test("the harnesses come out of the table itself, in table order", () => {
-    // Two callers ask what a harness is — doctor, to install one, and setup, to
+    // Two callers ask what a harness is — chef, to install one, and setup, to
     // hand a project over. Both read this, so neither can grow a list of its own.
     const fromTable: ToolSpec[] = all().filter((spec) => spec.tier === "harness");
     expect(fromTable).toEqual(harnesses());

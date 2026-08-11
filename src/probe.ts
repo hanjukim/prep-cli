@@ -6,7 +6,7 @@ import type { CheckResult, Platform, ToolSpec, WhichFn } from "./types.ts";
  * Bun.which walks PATH and returns a path string or null. It spawns no
  * subprocess, so there is no side effect like a `--version` call, and no added
  * dependency. Nothing else in prep changes the machine either (docs/adr/0010),
- * so every path through doctor is a read.
+ * so every path through chef is a read.
  */
 export const bunWhich: WhichFn = (binary) => Bun.which(binary);
 
