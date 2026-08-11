@@ -150,6 +150,20 @@ step() {
 # one line to act on rather than a wall of shell output.
 on_error() {
   local code=$?
+
+  # `set -E` carries this trap into subshells, and a subshell returning non-zero
+  # is usually a question being answered rather than a run going wrong: `have`
+  # asks one per tool, in a `$(command -v …)`, and every tool the machine does
+  # not hold answers no. `exit` there ends the subshell alone, so announcing a
+  # stop would be false twice over — a bare Mac announced five and finished.
+  #
+  # The caller sees the code either way. It handles it, as `have` does, or it
+  # fails itself and brings this trap back here, where a run can really be
+  # stopped.
+  if [ "$BASH_SUBSHELL" -ne 0 ]; then
+    exit "$code"
+  fi
+
   printf '\nStopped during: %s\n' "$STEP" >&2
   printf 'The last command exited with %s. Nothing after this step ran.\n' "$code" >&2
   printf 'Fix that and run this script again. It skips whatever is already installed.\n' >&2
@@ -743,6 +757,24 @@ esac
 printf 'Platform: %s (%s)\n' "$PLATFORM" "$(uname -m)"
 
 if [ "$PLATFORM" = "macos" ]; then
+  # Homebrew installs to /opt/homebrew on Apple Silicon and /usr/local on Intel,
+  # and a shell that started before it has neither on PATH until a rc is read
+  # again. So the disk is read before the question is asked: a machine that
+  # holds brew and a terminal that has not heard about it are the same machine,
+  # and asking PATH first installs Homebrew over itself — which is what a run
+  # started from a shell without `path_helper` did.
+  put_brew_on_path() {
+    local candidate
+    for candidate in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+      if [ -x "$candidate" ]; then
+        eval "$("$candidate" shellenv)"
+        break
+      fi
+    done
+  }
+
+  put_brew_on_path
+
   if have brew; then
     echo "Homebrew is already here."
   else
@@ -751,18 +783,26 @@ if [ "$PLATFORM" = "macos" ]; then
     echo "Installing Homebrew. It brings the Command Line Tools, and git with them."
     NONINTERACTIVE=1 /bin/bash -c \
       "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+    # It landed a moment ago, so this shell has still never read a rc naming it.
+    put_brew_on_path
   fi
 
-  # Homebrew installs to /opt/homebrew on Apple Silicon and /usr/local on Intel,
-  # and a fresh shell has neither on PATH until a shell rc is read again.
-  for candidate in /opt/homebrew/bin/brew /usr/local/bin/brew; do
-    if [ -x "$candidate" ]; then
-      eval "$("$candidate" shellenv)"
-      break
-    fi
-  done
-
   have brew || fail "Homebrew is installed but brew is not on PATH. Open a new terminal and try again."
+
+  # Homebrew 6 asks "Do you want to proceed with the installation? [y/n]" before
+  # every install and calls that mode the default. It only asks where stdin is a
+  # terminal, which the one-liner's stdin is not — but a saved copy run as
+  # `bash bootstrap.sh` has one, and there the run stops at step 4 forever with
+  # no message and nobody to answer. A real terminal is the case this script
+  # exists for, so it says yes once for the whole run.
+  #
+  # The installs it reaches are this script's own: `brew install node` and
+  # `brew install gh`. Step 8 does not need it — a gap command runs as
+  # `bash -c "$command" </dev/null`, so brew has nobody to ask there — but the
+  # answer belongs to the run rather than to two call sites, and step 8 stays
+  # covered whatever prep composes for it later (docs/adr/0009 decision 3).
+  export HOMEBREW_NO_ASK=1
 else
   # apt is already the system here, so there is nothing to install before it.
   have apt-get ||
