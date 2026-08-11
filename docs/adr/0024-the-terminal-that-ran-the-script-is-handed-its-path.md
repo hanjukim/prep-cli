@@ -3,7 +3,11 @@
 **Date:** 2026-08-06
 **Status:** Accepted — extends ADR-0013's PATH decision and ADR-0017, which put
 `~/.local/bin` into every shell rc and left the shell running the script to a
-sentence at the very end. Found by a real run on WSL with Ubuntu, and confirmed
+sentence at the very end. ADR-0029 narrows decision 6: every rc that exists is
+still written to, but what decides whether a file has to be *created* is now
+whether the login shell reads one, rather than whether the machine has one at
+all — a zsh account with a `.profile` and no `.zshrc` had a rc file and could
+not read it. Found by a real run on WSL with Ubuntu, and confirmed
 by another on the same machine. ADR-0028 keeps decision 8 and widens the block it
 draws: on the closing message the env line now leads the commands it makes
 findable, rather than standing in a block of its own above them.
