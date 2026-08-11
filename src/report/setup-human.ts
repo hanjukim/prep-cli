@@ -4,7 +4,6 @@ import type {
   Artifact,
   CodexArtifact,
   GuidanceArtifact,
-  HandoffItemId,
   HandoffResult,
   HarnessPresence,
   MergePlan,
@@ -19,6 +18,7 @@ import type {
   SetupOutcome,
   SettingsDocument,
 } from "../types.ts";
+import { handoffRows } from "./handoff.ts";
 import { INDENT, join, pad, widest } from "./layout.ts";
 
 export type SetupHumanReportInput = {
@@ -259,55 +259,20 @@ function conflicts(lines: string[], plan: MergePlan): void {
 }
 
 /**
- * How each owed item is worded. The check reports a status and a path; the
- * sentence that goes with them lives here, so no wording reaches the outcome
- * and none of it can leak into the JSON contract.
- */
-const HANDOFF: Record<
-  HandoffItemId,
-  { title: string; missing: string; empty: (path: string) => string }
-> = {
-  language: {
-    title: "language",
-    missing: "no AGENTS.md and no CLAUDE.md",
-    empty: (path) => `${path} has no Language section`,
-  },
-  "issue-tracker": {
-    title: "issue tracker",
-    missing: "no docs/agents/issue-tracker.md",
-    empty: (path) => `${path} names no tracker`,
-  },
-  "domain-docs": {
-    title: "domain docs",
-    missing: "no docs/agents/domain.md",
-    empty: (path) => `${path} is empty`,
-  },
-};
-
-/** What one item's line says on the right. A path when it is settled, what is wrong when it is not. */
-function owedNote(result: HandoffResult): string {
-  const wording = HANDOFF[result.id];
-  if (result.path === null) return wording.missing;
-  return result.status === "ready" ? result.path : wording.empty(result.path);
-}
-
-/**
  * What the harness still owes.
  *
  * Shown on every run, whatever prep did with the settings file: the two are
  * unrelated, and a run that wrote nothing is exactly when a person most needs
  * to be told what is left.
+ *
+ * The rows are shared with doctor, which reads the same check. What is setup's
+ * own is the sentence under them — this run has just written files, so it can
+ * say what is left beside what it did (docs/adr/0027).
  */
 function handoff(lines: string[], results: readonly HandoffResult[]): void {
   if (results.length === 0) return;
 
-  const width = widest(results.map((result) => HANDOFF[result.id].title));
-
-  lines.push("", `Handoff (${results.length})`);
-  for (const result of results) {
-    const mark = result.status === "ready" ? "✓" : "✗";
-    lines.push(INDENT + join(`${mark} ${pad(HANDOFF[result.id].title, width)}`, owedNote(result)));
-  }
+  lines.push("", `Handoff (${results.length})`, ...handoffRows(results));
 
   const owed = results.filter((result) => result.status !== "ready").length;
   // What to run about it, and who writes it, are the Next block's lines to say.

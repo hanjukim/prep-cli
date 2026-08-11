@@ -4,7 +4,9 @@
 **Status:** Accepted — extends ADR-0013's PATH decision and ADR-0017, which put
 `~/.local/bin` into every shell rc and left the shell running the script to a
 sentence at the very end. Found by a real run on WSL with Ubuntu, and confirmed
-by another on the same machine.
+by another on the same machine. ADR-0028 keeps decision 8 and widens the block it
+draws: on the closing message the env line now leads the commands it makes
+findable, rather than standing in a block of its own above them.
 **Sources:** ADR-0009, ADR-0013, ADR-0017, ADR-0021, ADR-0022; a real
 `curl … | bash` run on WSL that stopped at step 9; `https://bun.sh/install`
 
@@ -107,7 +109,8 @@ three stood, and emitted one POSIX block. Three shells fall through that:
    of install output somebody has just watched scroll by, and it is the one line
    in the run that decides whether the next command they type is found. So it
    sits between two rules, with the command alone in reverse video —
-   `announce_env_line`. Emphasis is dropped where neither stream is a terminal,
+   `announce_env_line`, which ADR-0028 renames `announce_next_action` and gives
+   the commands it makes findable. Emphasis is dropped where neither stream is a terminal,
    because escape codes in a log are noise rather than emphasis, and where
    `NO_COLOR` is set, because somebody who set it has already said so. stderr
    counts as well as stdout: the stop at step 9 goes there.

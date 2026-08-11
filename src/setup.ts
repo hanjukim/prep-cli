@@ -60,6 +60,18 @@ export class SetupError extends Error {
   }
 }
 
+/**
+ * Refuses a path that is not a directory.
+ *
+ * A path that is missing, or is a file, is a tool error. Reporting it as
+ * "nothing to do" would hide a typo behind a legitimate-looking no-op. Both
+ * subcommands take a project path, so both come through here and a mistyped one
+ * gets the same sentence whichever was asked (docs/adr/0027).
+ */
+export function requireDirectory(root: string, fs: SetupFs): void {
+  if (!fs.isDirectory(root)) throw new SetupError(`Not a project directory: ${root}`);
+}
+
 export type SetupInput = {
   /** The project directory. */
   root: string;
@@ -311,9 +323,7 @@ export function setup(input: SetupInput): SetupOutcome {
   // views of the same PATH.
   const which = input.which ?? bunWhich;
 
-  // A path that is missing, or is a file, is a tool error. Reporting it as
-  // "nothing to do" would hide a typo behind a legitimate-looking no-op.
-  if (!fs.isDirectory(root)) throw new SetupError(`Not a project directory: ${root}`);
+  requireDirectory(root, fs);
 
   const presets = all().filter((preset) => fs.exists(join(root, preset.marker)));
   const detected = presets.map((preset) => preset.type);

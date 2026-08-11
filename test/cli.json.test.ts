@@ -27,8 +27,10 @@ const FOUND_NONE: WhichFn = () => null;
 
 type Payload = {
   platform: string;
+  root?: string;
   results: { id: string; status: string; binary: string | null; path: string | null }[];
   pass: { id: string; status: string; checks: string[]; guidance: unknown }[];
+  handoff?: { id: string; status: string; path: string | null }[];
 };
 
 async function json(argv: readonly string[], platformName: string, which: WhichFn) {
@@ -197,6 +199,86 @@ const SEEDED = {
   [POINTER]: "@AGENTS.md\n",
   [CODEX_CONFIG]: 'default_permissions = "project-edit"\n',
 };
+
+describe("--json with a project", () => {
+  async function doctorJson(argv: readonly string[], fs: SetupFs) {
+    const result = await run(argv, { platformName: "darwin", which: FOUND_ALL, fs });
+    return { result, payload: result.stdout ? (JSON.parse(result.stdout) as Payload) : null };
+  }
+
+  test("with no path, neither project key is emitted at all", async () => {
+    // The absence is the answer. An empty `handoff` would read as a project that
+    // owes nothing, and the bootstrap script's own step-8 call names no path.
+    const { payload } = await json(["doctor", "--json"], "darwin", FOUND_ALL);
+    expect(Object.keys(payload!)).toEqual(["platform", "results", "pass"]);
+  });
+
+  test("with a path, the root and the handoff come through", async () => {
+    const { payload } = await doctorJson(["doctor", "--json", PROJECT], fakeFs([PROJECT]));
+    expect(payload?.root).toBe(PROJECT);
+    expect(payload?.handoff?.map((entry) => entry.id)).toEqual([
+      "language",
+      "issue-tracker",
+      "domain-docs",
+    ]);
+    expect(payload?.handoff?.every((entry) => entry.status === "missing")).toBe(true);
+  });
+
+  test("a handoff entry is the same three fields the setup contract carries", async () => {
+    const { payload } = await doctorJson(["doctor", "--json", PROJECT], fakeFs([PROJECT], SEEDED));
+    for (const entry of payload!.handoff!) {
+      expect(Object.keys(entry)).toEqual(["id", "status", "path"]);
+    }
+  });
+
+  test("the project row joins the pass array, ahead of the machine rows", async () => {
+    const { payload } = await doctorJson(["doctor", "--json", PROJECT], fakeFs([PROJECT]));
+    expect(payload?.pass.map((item) => item.id)).toEqual([
+      "git-repository",
+      "github-login",
+      "git-identity",
+      "claude-login",
+      "codex-login",
+    ]);
+    expect(payload?.pass[0]?.status).toBe("missing");
+    // Nothing was asked as a command, so the entry names none to ask.
+    expect(payload?.pass[0]?.checks).toEqual([]);
+  });
+
+  test("a repository reads ready on that row", async () => {
+    const fs = fakeFs([PROJECT, "/project/.git"]);
+    const { payload } = await doctorJson(["doctor", "--json", PROJECT], fs);
+    expect(payload?.pass[0]).toMatchObject({ id: "git-repository", status: "ready" });
+  });
+
+  test("an unusable path is plain text on stderr, with empty stdout", async () => {
+    const { result } = await doctorJson(["doctor", "--json", "/nowhere"], fakeFs([PROJECT]));
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("Not a project directory: /nowhere");
+  });
+
+  test("the project half moves no exit code", async () => {
+    const { result } = await doctorJson(["doctor", "--json", PROJECT], fakeFs([PROJECT]));
+    expect(result.exitCode).toBe(0);
+  });
+
+  test("the human report and the machine report agree on the exit code", async () => {
+    for (const present of [[PROJECT], [PROJECT, "/project/.git"]]) {
+      const human = await run(["doctor", PROJECT], {
+        platformName: "darwin",
+        which: FOUND_ALL,
+        fs: fakeFs(present),
+      });
+      const machine = await run(["doctor", "--json", PROJECT], {
+        platformName: "darwin",
+        which: FOUND_ALL,
+        fs: fakeFs(present),
+      });
+      expect(machine.exitCode).toBe(human.exitCode);
+    }
+  });
+});
 
 type SettingsPayload = {
   kind: "claude-settings";

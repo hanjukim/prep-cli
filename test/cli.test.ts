@@ -373,6 +373,12 @@ describe("the pass items", () => {
     expect(writes.some((text) => text.includes("gh auth status"))).toBe(true);
   });
 
+  test("the project row is absent until a project is named", async () => {
+    const result = await run(["doctor"], EQUIPPED);
+    expect(result.stdout).not.toContain("git repository");
+    expect(result.stdout).toContain("Pass (4)");
+  });
+
   test("pass items never change the exit code", async () => {
     // Every account missing on a fully equipped machine is still 0: an account
     // nobody has opened is a legitimate state, not a broken machine.
@@ -381,6 +387,125 @@ describe("the pass items", () => {
     // And a ready pass buys nothing back: gaps still make it 1.
     const gappy = { platformName: "darwin", which: fakeWhich({ brew: "/opt/homebrew/bin/brew" }) };
     expect((await run(["doctor"], { ...gappy, check: () => true })).exitCode).toBe(1);
+  });
+});
+
+describe("doctor takes a path", () => {
+  /** Everything installed and every account settled, so the project half is the only variable. */
+  const EQUIPPED = { platformName: "darwin", which: fakeWhich(ALL_PRESENT_DARWIN) };
+
+  /** A project already carrying everything the harness side owes. */
+  const HANDED_OVER = {
+    [GUIDANCE]: "# Project\n\n## Language\n\nEnglish in the repository.\n",
+    "/project/docs/agents/issue-tracker.md": "# Issue tracker: GitHub\n\nIssues live in GitHub.\n",
+    "/project/docs/agents/domain.md": "# Domain\n\nThe glossary is CONTEXT.md.\n",
+  };
+
+  test("with no path, the report says nothing about any project", async () => {
+    const result = await run(["doctor"], EQUIPPED);
+    expect(result.stdout).not.toContain("Handoff");
+    expect(result.stdout.split("\n")[0]).toBe("prep doctor · darwin");
+  });
+
+  test("with a path, the report names the project and what it owes", async () => {
+    const { fs } = fakeFs([PROJECT]);
+    const result = await run(["doctor", PROJECT], { ...EQUIPPED, fs });
+    expect(result.stdout.split("\n")[0]).toBe(`prep doctor · darwin · ${PROJECT}`);
+    expect(result.stdout).toContain("Handoff (3)");
+    expect(result.stdout).toContain("no docs/agents/domain.md");
+  });
+
+  test("a directory that is no repository is a pass row, with git init beside it", async () => {
+    const { fs } = fakeFs([PROJECT]);
+    const result = await run(["doctor", PROJECT], { ...EQUIPPED, fs });
+    expect(result.stdout).toMatch(/✗ git repository\s+git init/);
+  });
+
+  test("a repository closes that row without closing the others", async () => {
+    const { fs } = fakeFs([PROJECT, "/project/.git"]);
+    const result = await run(["doctor", PROJECT], { ...EQUIPPED, fs });
+    expect(result.stdout).toContain("✓ git repository");
+    expect(result.stdout).toContain("Handoff (3)");
+  });
+
+  test("a project owing nothing still reports its rows, so the section answers the question", async () => {
+    const { fs } = fakeFs([PROJECT, "/project/.git"], HANDED_OVER);
+    const result = await run(["doctor", PROJECT], { ...EQUIPPED, fs });
+    expect(result.stdout).toContain("✓ language");
+    expect(result.stdout).toContain("✓ issue tracker");
+    expect(result.stdout).toContain("✓ domain docs");
+  });
+
+  test("nothing about the project moves the exit code", async () => {
+    // An empty directory that is no repository and owes all three items: still 0
+    // on a machine with no gaps. Being owed something is not a failed run.
+    const { fs } = fakeFs([PROJECT]);
+    expect((await run(["doctor", PROJECT], { ...EQUIPPED, fs })).exitCode).toBe(0);
+    // And a project that owes nothing buys no gap back.
+    const gappy = { platformName: "darwin", which: fakeWhich({ brew: "/opt/homebrew/bin/brew" }) };
+    const settled = fakeFs([PROJECT, "/project/.git"], HANDED_OVER);
+    expect((await run(["doctor", PROJECT], { ...gappy, fs: settled.fs })).exitCode).toBe(1);
+  });
+
+  test("doctor writes nothing, whatever the project is missing", async () => {
+    const { fs, written } = fakeFs([PROJECT]);
+    await run(["doctor", PROJECT], { ...EQUIPPED, fs });
+    expect([...written.keys()]).toEqual([]);
+  });
+
+  test("a path that is not a directory is a tool error, not an empty project", async () => {
+    const { fs } = fakeFs([PROJECT]);
+    const result = await run(["doctor", "/nowhere"], { ...EQUIPPED, fs });
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("Not a project directory: /nowhere");
+  });
+
+  test("a guidance file that cannot be read stops the run rather than reading as absent", async () => {
+    const { fs } = fakeFs([PROJECT, GUIDANCE]);
+    const result = await run(["doctor", PROJECT], { ...EQUIPPED, fs });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain("Could not read AGENTS.md");
+  });
+
+  test("two paths are refused — doctor takes one project at most", async () => {
+    const { fs } = fakeFs([PROJECT]);
+    const result = await run(["doctor", PROJECT, "/other"], { ...EQUIPPED, fs });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain("doctor takes one path at most");
+  });
+
+  test("with no path doctor never guesses one, even where setup would fall back to it", async () => {
+    const { fs } = fakeFs([PROJECT]);
+    const result = await run(["doctor"], { ...EQUIPPED, fs, cwd: PROJECT });
+    expect(result.stdout).not.toContain("Handoff");
+    expect(result.stdout).not.toContain("git repository");
+  });
+
+  test("run from a home directory that looks like a project, it still reports no project", async () => {
+    // The trap the argument exists to avoid: `~/.claude/settings.json` stands on
+    // nearly every machine running Claude Code, and `~` under git for dotfiles
+    // makes it a repository with a settings file and a CLAUDE.md. Any detection
+    // rule strong enough to recognise an empty project recognises this.
+    const home = "/home/me";
+    const looksLikeAProject = fakeFs(
+      [home, `${home}/.git`, `${home}/.claude/settings.json`],
+      { [`${home}/CLAUDE.md`]: "@AGENTS.md\n" },
+    );
+    const result = await run(["doctor"], {
+      ...EQUIPPED,
+      fs: looksLikeAProject.fs,
+      cwd: home,
+      home,
+    });
+    expect(result.stdout.split("\n")[0]).toBe("prep doctor · darwin");
+    expect(result.stdout).not.toContain("Handoff");
+    expect(result.stdout).not.toContain(home);
+  });
+
+  test("the same project reported twice reads the same both times", async () => {
+    const deps = { ...EQUIPPED, fs: fakeFs([PROJECT]).fs };
+    expect(await run(["doctor", PROJECT], deps)).toEqual(await run(["doctor", PROJECT], deps));
   });
 });
 

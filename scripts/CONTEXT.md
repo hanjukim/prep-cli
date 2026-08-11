@@ -33,10 +33,11 @@ the one question in the script whose refusal is an ending rather than a stop —
 Enter closes the run the way a run with nothing to clone already closed. Two
 runs are never asked at all: one that set `PREPARED_REPO` in the environment
 has answered ahead of the question (docs/adr/0015), and one with no terminal
-has nobody to ask, so its closing message names the variable rather than the
-question. A run that clones ends by printing the two commands that finish the
-job, `cd` into the project and `claude`, because a script cannot move the shell
-that called it. On macOS
+has nobody to ask, so it takes the same ending Enter takes — the machine-only
+one, whose next action is a `git clone` neither run needs a terminal for
+(docs/adr/0028). A run that clones ends by printing the two commands that finish
+the job, `cd` into the project and `claude`, because a script cannot move the
+shell that called it. On macOS
 the brew installer pulls in the Command Line Tools, so git arrives with it; on
 Linux apt is already the system, so it starts with `sudo apt install git`. The
 script carries no tool list of its own — **prep decides and the script
@@ -88,24 +89,49 @@ email defaults to the `<id>+<login>@users.noreply.github.com` address GitHub
 hands out for commits, which is safe to publish and always right for that
 account. Enter takes both, so the run that follows a login needs no typing at
 all. Asking still needs a terminal, so a run without one stops and names the two
-commands instead. A run that names no project never reaches the step, and its
-closing message names the same two commands rather than asking — the machine-only
-ending is where that run reads what is left for it (docs/adr/0021). The second
-thing is the GitHub login above — sent away for mid-run on the project branch,
-and named on the machine-only ending when gh carries none. That run needed no
-account and the work after it does: this script is served from GitHub, and the
-guidance prep writes sends its agents to a GitHub tracker they reach through gh.
-Named there it stops nothing, since the run has already
-finished, and it is printed ahead of the two identity commands — the order the
-project branch runs the pair in — because a login is what turns those commands
-into answers somebody can be offered. The third is the Claude Code login: the
+commands instead. A run that names no project never reaches the step at all
+(docs/adr/0021). The second thing is the GitHub login above — sent away for
+mid-run on the project branch, where a clone needs it.
+
+**The ending says what this run did, and leaves the machine's standing state to
+prep.** Both of those answers were once the ending's: it asked
+`gh auth status` and `git config --get` in its own shell and named whichever came
+back empty. prep reads both now, as **pass** items, and the harness logins with
+them (docs/adr/0026), so the ending names neither and points at `prep doctor`
+instead (docs/adr/0027). The rule that moved them is the one the tool list already
+follows — **prep decides and the script executes.** Two actors answering the same
+question are two answers free to drift, and on the day they differ nobody can say
+which read the machine. What the ending still reports is this run's own leftovers:
+gaps that would not install, and tools it could not give their own name. The third
+thing a person is told about is the Claude Code login: the
 first `claude` run authenticates through a browser, which the script cannot do
-for anybody. The script's closing message is where that is said, and it is said
-nowhere else: whoever ran the one-liner is looking at that terminal, not at a
-page they would have had to find first. It names the account the login needs —
-Claude Code carries a paid plan only — and it names Codex's own login, since
-doctor goes on to report Codex as a gap and installing it opens the same
-question again.
+for anybody. **The two browser logins are handed over together wherever a run
+ends in front of one**, so somebody opens a browser once: the closing message
+says the Claude Code login, and so does the stop at the GitHub login, which is a
+run that ends before reaching the closing message at all (docs/adr/0028). One
+wording says it in both places — `claude_login_note` — and it names the account
+the login needs, since Claude Code carries a paid plan only. Codex's own login is
+named on the ending because the script never installs Codex, so a run ends with
+the machine holding none — and a login question about a harness that is not there
+is the one question doctor does not ask, since its rows are gated on the harness
+being installed (docs/adr/0026). Once somebody installs it, doctor names the
+login from then on. Nothing about it is waiting on a browser this trip.
+
+**The ending names one next action, and prints everything else as reference.**
+A finished run has several things to report — where the project is, gaps that
+would not close, tools it could not name, two logins no report can perform, and
+the command that reports the rest — and exactly one of them is the thing to do
+next. That one is the **next
+action**: drawn between two rules under a `Next:` headline, with the commands that
+perform it and nothing else, above a `For reference` heading that turns the rest
+into reference (docs/adr/0028). Somebody who reads the first block and stops has
+read the thing to do. A run that cloned points at the project it just prepared —
+`cd` and `claude`. A run that stopped at the machine points at getting one —
+`git clone` and `prep setup`, ordinary commands by then, since prep is installed:
+**the ending never sends anybody back through the entry point.** Re-running the
+one-liner belongs to the stops, which resume where they stopped; a finished run
+has nothing to resume, and asking for a second download to answer one question
+was the one thing that ending got wrong.
 
 **An account that cannot see a repository is not a broken machine.** Before the
 project clone the script asks `gh repo view`, an authenticated question, and a
@@ -195,7 +221,8 @@ line that decides whether the next command somebody types is found. A run whose
 output is a log rather than a terminal, and a run under `NO_COLOR`, get the same
 words without the escape codes. The two places are the stop at step 9, where a
 person is asked to work in that terminal and never sees the closing message, and
-the top of the closing message itself, ahead of every line that names a tool. The stop at step 9 also names the `curl … | bash` that
+the **next action** on the closing message, where it leads the commands it makes
+findable. The stop at step 9 also names the `curl … | bash` that
 resumes the run, since it is the one handover asking for two commands. Opening a
 new terminal is still what is offered first: it is shorter and needs no paste
 (docs/adr/0024).
@@ -243,13 +270,22 @@ without it nobody reads the permission files `prep setup` writes; a plugin has
 no such claim, and a marketplace is somebody else's file whose schema moves. A
 run that lost a whole machine to one is what that costs, and it happened.
 
-**Only the script changes the machine.** prep starts no process on any path
-(docs/adr/0010). doctor reads, decides, and reports, naming a command or a
+**Only the script changes the machine.** prep starts nothing but the fixed
+read-only questions its **pass** items ask — `gh auth status`, `git config
+--get` — and changes nothing on any path (docs/adr/0010, narrowed by
+docs/adr/0026). doctor reads, decides, and reports, naming a command or a
 document for each gap. That is why `sudo` is not prep's question — a shell
 script running it is ordinary, and a tool that closes secrets with `deny` never
 ends up asking for root in the same run.
 
-The script does not move the scope of prep's own subcommands. doctor looks at
-the machine, setup looks at the project. The script calls them in order and
-nothing more.
+The script does not decide what prep decides. prep's two subcommands divide on
+purpose and not on scope: **doctor diagnoses, setup writes** (docs/adr/0027).
+doctor reads the machine on its own, and the project as well when it is handed
+one; setup writes a project's files. The script calls each for what it is for,
+executes what it reports, and adds no judgement of its own.
+
+The one call the script makes is `prep doctor --json` at step 8, and it names no
+path. That is before step 9 asks for a project, so there is no project to name
+yet — the answer is the machine, exactly as it was before doctor could read a
+project at all.
 _Avoid_: installer, wizard, provisioning

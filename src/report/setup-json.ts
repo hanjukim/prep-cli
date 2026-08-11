@@ -170,7 +170,16 @@ export function renderSetupJson(outcome: SetupOutcome): string {
       ...recommendation,
       server: { ...recommendation.server },
     })),
-    handoff: outcome.handoff.map((result) => ({ ...result })),
+    // Field by field, and in the same three fields doctor's contract emits
+    // (`src/report/json.ts`). Both reports read one `checkHandoff`, so a field
+    // added to its result for prep's own use would otherwise reach whichever
+    // contract spreads and not the one that picks — the two would part company
+    // over an internal change neither of them made (docs/adr/0027).
+    handoff: outcome.handoff.map((result) => ({
+      id: result.id,
+      status: result.status,
+      path: result.path,
+    })),
     // Field by field, for the reason the artifacts are: a step is read off the
     // machine as well as off the outcome, and a field added there for prep's own
     // use must not reach a consumer just because it was added.

@@ -140,3 +140,24 @@ Pass (3) — closed by you, or not at all
 No gaps.
 "
 `;
+
+exports[`the project section the handoff rows say what the project owes, each with its own reason 1`] = `
+"prep doctor · darwin · /home/me/work/project
+
+Prerequisites
+  ✓ homebrew     /opt/homebrew/bin/brew
+
+Installed (12)
+  ✓ git  ripgrep  fd  zoxide  gh  bat  eza  fzf  jq  make  claude-code  codex
+
+Pass (1) — closed by you, or not at all
+  ✗ git repository  git init
+
+Handoff (3) — owed to this project
+  ✓ language       AGENTS.md
+  ✗ issue tracker  docs/agents/issue-tracker.md names no tracker
+  ✗ domain docs    no docs/agents/domain.md
+
+No gaps.
+"
+`;

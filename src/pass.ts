@@ -1,4 +1,13 @@
-import type { CheckFn, PassResult, PassSpec, PassStatus } from "./types.ts";
+import { join } from "node:path";
+
+import type {
+  CheckFn,
+  PassResult,
+  PassSpec,
+  PassStatus,
+  ProjectPassSpec,
+  SetupFs,
+} from "./types.ts";
 
 /**
  * The pass runner: asks the registry's fixed read-only questions and reports
@@ -11,6 +20,11 @@ import type { CheckFn, PassResult, PassSpec, PassStatus } from "./types.ts";
  * argv from the registry, runs without a shell, and has its output thrown away
  * unread — an account name printed by `gh auth status` never exists in this
  * process as data.
+ *
+ * A project row asks nothing of the machine and starts nothing at all: it reads
+ * one path through the injected file system, the same boundary setup writes
+ * through (docs/adr/0027). So the module's spawn story is unchanged — what
+ * widened is which questions it answers, not what it is allowed to run.
  */
 
 /**
@@ -90,43 +104,85 @@ export function withProgress(
 }
 
 /**
- * Asks every pass item this machine should be asked about, in table order.
+ * The project a run was given, and how to read it.
  *
- * A row gated on a harness is skipped when the machine does not hold that
- * harness — a login question for a tool nobody installed has no useful answer.
+ * Absent rather than empty when doctor was given no path, because the two say
+ * different things: no project means the project rows were never asked, and a
+ * project whose rows all came back missing is an answer.
+ */
+export type PassProject = { root: string; fs: SetupFs };
+
+/**
+ * Answers one project row: the marker is there, or it is not.
+ *
+ * `exists` and not `isDirectory`, because a `.git` file is what a worktree and a
+ * submodule carry, and both of those are repositories. There is no `unknown`
+ * here — a path does not time out, and nothing was asked as a command, so the
+ * row hands back no command either.
+ */
+function readProjectItem(spec: ProjectPassSpec, project: PassProject): PassResult {
+  const there = project.fs.exists(join(project.root, spec.marker));
+  return {
+    id: spec.id,
+    status: there ? "ready" : "missing",
+    checks: [],
+    guidance: spec.guidance,
+  };
+}
+
+/** Answers one machine row by asking every check it carries. */
+async function askMachineItem(
+  spec: Extract<PassSpec, { scope: "machine" }>,
+  check: CheckFn,
+): Promise<PassResult> {
+  const answers: (boolean | null)[] = [];
+  for (const argv of spec.checks) answers.push(await check(argv));
+
+  // Evidence order: any "no" is a missing item even when another check gave no
+  // answer, because one unset half already refuses every commit; only unanswered
+  // checks alone make an item unknown.
+  const status: PassStatus = answers.includes(false)
+    ? "missing"
+    : answers.includes(null)
+      ? "unknown"
+      : "ready";
+
+  return {
+    id: spec.id,
+    status,
+    checks: spec.checks.map((argv) => argv.join(" ")),
+    guidance: spec.guidance,
+  };
+}
+
+/**
+ * Asks every pass item this run should be asked about, in table order.
+ *
+ * Two things take a row off the table, one per scope. A row gated on a harness is
+ * skipped when the machine does not hold that harness — a login question for a
+ * tool nobody installed has no useful answer. A project row is skipped when there
+ * is no project, which is every run of `prep doctor` with no argument: doctor
+ * does not guess which project it is in (docs/adr/0027).
+ *
  * Which harnesses are here comes from the caller, off the same check doctor
  * already ran, so this module never reads PATH itself.
- *
- * The statuses are decided in evidence order: any "no" is a missing item even
- * when another check gave no answer, because one unset half already refuses
- * every commit; only unanswered checks alone make an item unknown.
  */
 export async function runPass(
   specs: readonly PassSpec[],
   installedHarnesses: ReadonlySet<string>,
   check: CheckFn,
+  project: PassProject | null = null,
 ): Promise<PassResult[]> {
-  const asked = specs.filter(
-    (spec) => spec.harness === undefined || installedHarnesses.has(spec.harness),
-  );
-
   const results: PassResult[] = [];
-  for (const spec of asked) {
-    const answers: (boolean | null)[] = [];
-    for (const argv of spec.checks) answers.push(await check(argv));
 
-    const status: PassStatus = answers.includes(false)
-      ? "missing"
-      : answers.includes(null)
-        ? "unknown"
-        : "ready";
+  for (const spec of specs) {
+    if (spec.scope === "project") {
+      if (project !== null) results.push(readProjectItem(spec, project));
+      continue;
+    }
 
-    results.push({
-      id: spec.id,
-      status,
-      checks: spec.checks.map((argv) => argv.join(" ")),
-      guidance: spec.guidance,
-    });
+    if (spec.harness !== undefined && !installedHarnesses.has(spec.harness)) continue;
+    results.push(await askMachineItem(spec, check));
   }
 
   return results;

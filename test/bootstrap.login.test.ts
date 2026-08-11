@@ -16,6 +16,37 @@ import { readFileSync } from "node:fs";
  */
 const SCRIPT = readFileSync(new URL("../scripts/bootstrap.sh", import.meta.url), "utf8");
 
+/**
+ * One shell function's body, so an assertion about it cannot match elsewhere.
+ *
+ * Comment-only lines come out, because these assertions are about what the
+ * function runs and a comment saying which call was removed names that call.
+ * Safe for the functions read here: none of their heredocs carries a line
+ * starting with `#`.
+ */
+function shellFunction(name: string): string {
+  const start = SCRIPT.indexOf(`\n${name}() {`);
+  if (start === -1) throw new Error(`${name}() is not in scripts/bootstrap.sh`);
+
+  // The closing brace at column zero ends it. An indented one would send this
+  // slice into the functions below, and a negative assertion would then be
+  // reading the wrong body while still passing, so the slice is held to holding
+  // exactly one definition.
+  const end = SCRIPT.indexOf("\n}\n", start);
+  if (end === -1) throw new Error(`${name}() has no closing brace at column zero`);
+
+  const body = SCRIPT.slice(start, end + 3);
+  const definitions = body.match(/^\w+\(\) \{$/gm) ?? [];
+  if (definitions.length !== 1) {
+    throw new Error(`${name}() sliced ${definitions.length} definitions, not 1`);
+  }
+
+  return body
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("#"))
+    .join("\n");
+}
+
 /** The script's top-level statements from one step marker up to another. */
 function between(first: string, second: string): string {
   const start = SCRIPT.indexOf(`step "${first}"`);
@@ -42,26 +73,46 @@ describe("the machine is built without an account", () => {
     expect(SCRIPT).toInclude("GIT_TERMINAL_PROMPT=0 git ls-remote");
   });
 
-  test("the machine-only ending names the git identity commands", () => {
-    const ending = SCRIPT.slice(SCRIPT.indexOf("This machine is ready."));
-    expect(ending).toInclude("git config --global user.name");
-    expect(ending).toInclude("git config --global user.email");
+  // What a run that made no login is told at the end belongs to the closing
+  // message, and test/bootstrap.ending.test.ts runs that message rather than
+  // reading it.
+  test("nothing between the steps asks for the login the project step hands over", () => {
+    expect(machine).not.toInclude("auth login --git-protocol https --web");
+    expect(SCRIPT).toInclude("closing_message");
+  });
+});
+
+/**
+ * The ending asked `gh auth status` and `git config --get` in its own shell, to
+ * decide what it said about each. prep reads both now, as **pass** items
+ * (docs/adr/0026), so the ending asks neither and points at the command that
+ * does (docs/adr/0027).
+ *
+ * Both reads survive, and only where they are about this run: the project step
+ * stops in front of a login it needs for a clone, and offers an identity it can
+ * fill in from the account that login just proved. Neither is the machine's
+ * standing state.
+ */
+describe("the machine's standing state is not the ending's to read", () => {
+  const ending = shellFunction("closing_message");
+
+  test("the ending asks gh nothing", () => {
+    expect(ending).not.toInclude("gh auth status");
+    expect(ending).not.toInclude("auth login");
   });
 
-  // The run needed no account and the work after it does, so the ending is where
-  // the login is handed over — named, never run (docs/adr/0021).
-  test("the machine-only ending hands over the GitHub login", () => {
-    const ending = SCRIPT.slice(SCRIPT.indexOf("This machine is ready."));
-    expect(ending).toInclude('gh auth status >/dev/null 2>&1; then');
-    expect(ending).toInclude("auth login --git-protocol https --web");
-    expect(ending).toInclude("https://github.com/login/device");
+  test("the ending reads no git identity", () => {
+    expect(ending).not.toInclude("git config --get");
+    expect(ending).not.toInclude("git config --global");
   });
 
-  test("the login is offered before the identity it would answer for", () => {
-    const ending = SCRIPT.slice(SCRIPT.indexOf("This machine is ready."));
-    expect(ending.indexOf("auth login --git-protocol https --web")).toBeLessThan(
-      ending.indexOf("git config --global user.name"),
-    );
+  test("it points at prep doctor for both instead", () => {
+    expect(ending).toInclude("prep doctor reports what this machine still owes you");
+  });
+
+  test("the project step keeps both, because there they are about this run", () => {
+    expect(shellFunction("require_github_login")).toInclude("gh auth status");
+    expect(shellFunction("ensure_git_identity")).toInclude("git config --get user.name");
   });
 });
 

@@ -232,11 +232,11 @@ function harness(
 /**
  * The pass items: what prep reads as absent but must not close (docs/adr/0026).
  *
- * Each check is a fixed argv, never a string a shell reads. This table is the
- * whole whitelist of what doctor may start: no entry, no process. The checks
- * read no secret and change nothing — `gh auth status` validates the token
- * without printing it usably, and `git config --get` reads configuration. What
- * either prints is discarded whole, so no account identifier can reach a
+ * Machine rows are answered by a fixed argv, never a string a shell reads. Those
+ * rows are the whole whitelist of what doctor may start: no entry, no process.
+ * The checks read no secret and change nothing — `gh auth status` validates the
+ * token without printing it usably, and `git config --get` reads configuration.
+ * What either prints is discarded whole, so no account identifier can reach a
  * report.
  *
  * The guidance is the plated command a person takes. The git identity carries
@@ -248,16 +248,39 @@ function harness(
  * The harness rows are gated on the harness being installed, read off the same
  * registry table doctor already checks. A third harness added to `HARNESSES`
  * gets its login row by adding one entry here, gated the same way.
+ *
+ * One table for both scopes, and the order is the order somebody walks
+ * (docs/adr/0027). An empty project alternates between the two, so a table split
+ * by scope would leave a reader interleaving two lists to work out what comes
+ * first. `git init` leads because nothing below it has anywhere to land: a
+ * repository is what an identity signs commits in and what an account receives
+ * them from. The machine rows keep the order they already had, so a run with no
+ * argument reports what it reported before. The project row is asked only where
+ * there is a project — with no argument doctor drops it rather than guessing one.
  */
 const PASS: readonly PassSpec[] = [
   {
+    id: "git-repository",
+    scope: "project",
+    summary: "git repository",
+    marker: ".git",
+    // A person's decision, not a script's. Turning somebody's directory into a
+    // repository is theirs to choose, which is what puts this on the pass rather
+    // than among the gaps the bootstrap script closes. Not the remote: working
+    // locally and pushing nowhere is a normal way to work, so its absence says
+    // nothing worth printing.
+    guidance: { kind: "command", command: "git init" },
+  },
+  {
     id: "github-login",
+    scope: "machine",
     summary: "GitHub login",
     checks: [["gh", "auth", "status"]],
     guidance: { kind: "command", command: "gh auth login" },
   },
   {
     id: "git-identity",
+    scope: "machine",
     summary: "git identity",
     checks: [
       ["git", "config", "--get", "user.name"],
@@ -270,6 +293,7 @@ const PASS: readonly PassSpec[] = [
   },
   {
     id: "claude-login",
+    scope: "machine",
     summary: "Claude Code login",
     checks: [["claude", "auth", "status"]],
     guidance: { kind: "manual", note: "Run claude — its first run opens a browser and asks for the login" },
@@ -277,6 +301,7 @@ const PASS: readonly PassSpec[] = [
   },
   {
     id: "codex-login",
+    scope: "machine",
     summary: "Codex login",
     checks: [["codex", "login", "status"]],
     guidance: { kind: "command", command: "codex login" },

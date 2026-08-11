@@ -83,12 +83,35 @@ describe("JSON report snapshots", () => {
 });
 
 describe("the JSON contract", () => {
-  test("the top level is platform, results and pass, nothing else", () => {
+  test("with no project, the top level is platform, results and pass, nothing else", () => {
     const payload = parse("darwin", { brew: "/x" }) as Record<string, unknown>;
     expect(Object.keys(payload)).toEqual(["platform", "results", "pass"]);
     expect(payload.platform).toBe("darwin");
     expect(Array.isArray(payload.results)).toBe(true);
     expect(Array.isArray(payload.pass)).toBe(true);
+  });
+
+  test("with a project, root and handoff join it in a fixed place", () => {
+    const payload = JSON.parse(
+      renderJson({
+        platform: "darwin",
+        results: checkAll(FIXTURE, "darwin", fakeWhich({ brew: "/x" })),
+        project: {
+          root: "/project",
+          handoff: [
+            { id: "language", status: "ready", path: "AGENTS.md" },
+            { id: "issue-tracker", status: "empty", path: "docs/agents/issue-tracker.md" },
+            { id: "domain-docs", status: "missing", path: null },
+          ],
+        },
+      }),
+    ) as Record<string, unknown>;
+
+    expect(Object.keys(payload)).toEqual(["platform", "root", "results", "pass", "handoff"]);
+    expect(payload.root).toBe("/project");
+    for (const entry of payload.handoff as object[]) {
+      expect(Object.keys(entry)).toEqual(["id", "status", "path"]);
+    }
   });
 
   test("results keep the input order", () => {
