@@ -192,8 +192,12 @@ Every file that exists is written to rather than the one `$SHELL` names, because
 one person runs bash in one terminal and zsh in another and this run installed
 the tools for both.
 
-`$SHELL` decides one thing: which file to create where none exists at all. That
-used to be `~/.profile` always, and zsh never reads `~/.profile` — a fresh macOS
+`$SHELL` decides one thing: which file to create where the shell it names reads
+none of them. The question is about that shell rather than about the machine: an
+account with a `.profile` and no `.zshrc` has a rc file, zsh opens none of the
+ones this script writes into, and it gets a `.zshrc` made for it exactly as an
+account with nothing at all would. What gets created used to be `~/.profile`
+always, and zsh never reads `~/.profile` — a fresh macOS
 account and anybody who ran `chsh` before writing a rc got a file their own shell
 does not open. So it is `~/.zshrc` for zsh, `config.fish` for fish, `.profile`
 and `.bashrc` together for bash, and `.profile` for anything else. csh and tcsh

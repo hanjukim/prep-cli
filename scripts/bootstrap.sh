@@ -403,6 +403,27 @@ rc_candidates() {
     "$HOME/.config/fish/config.fish"
 }
 
+# The rc files, of the ones this script writes to, that this person's own shell
+# reads.
+#
+# `rc_candidates` is the wider list, and it is wide on purpose: a machine can
+# carry several shells and a PATH line in each costs nothing. This is the
+# narrower question — whether anything was written where this person will meet
+# it. A Mac account with a `.profile` and no `.zshrc` answers the wider question
+# yes and this one no, and zsh reads neither `.profile` nor `.bashrc`.
+#
+# `.zprofile` is missing here for the same reason it is missing there: a shell
+# reads it, but this script does not write to it, so its being present says
+# nothing about where this run's lines went.
+shell_rc_candidates() {
+  case "$(login_shell)" in
+    fish) printf '%s\n' "$HOME/.config/fish/config.fish" ;;
+    zsh) printf '%s\n' "$HOME/.zshrc" ;;
+    bash) printf '%s\n' "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile" ;;
+    *) printf '%s\n' "$HOME/.profile" ;;
+  esac
+}
+
 # The rc a machine with none at all gets, named by the shell that will read it.
 #
 # zsh is why this is not always `.profile`: zsh reads `.zshenv`, `.zprofile` and
@@ -466,11 +487,14 @@ persist_on_path() {
     "$HOME"/*) written_as="\$HOME${dir#"$HOME"}" ;;
   esac
 
-  # Nothing to append to means nobody reads anything, so one is created — the
-  # one this person's shell will actually read.
+  # Nothing this person's shell reads means the lines below land in files that
+  # nothing opens, so one it does read is created first. The question is about
+  # that shell and not about the machine: asking whether *any* rc exists let a
+  # zsh account with a `.profile` take the whole run's PATH into a file zsh
+  # never opens, with `create_default_rc` sitting right there unable to fire.
   while IFS= read -r rc; do
     if [ -f "$rc" ]; then any=1; fi
-  done < <(rc_candidates)
+  done < <(shell_rc_candidates)
 
   [ "$any" -eq 1 ] || create_default_rc
 
