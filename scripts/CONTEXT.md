@@ -196,11 +196,14 @@ the tools for both.
 none of them. The question is about that shell rather than about the machine: an
 account with a `.profile` and no `.zshrc` has a rc file, zsh opens none of the
 ones this script writes into, and it gets a `.zshrc` made for it exactly as an
-account with nothing at all would. What gets created used to be `~/.profile`
-always, and zsh never reads `~/.profile` — a fresh macOS
-account and anybody who ran `chsh` before writing a rc got a file their own shell
-does not open. So it is `~/.zshrc` for zsh, `config.fish` for fish, `.profile`
-and `.bashrc` together for bash, and `.profile` for anything else. csh and tcsh
+account with nothing at all would. Where `$SHELL` is unset — a `su`, a cron —
+the password database answers instead, which is `getent` on Linux and `dscl` on
+macOS, a machine that keeps the record in Directory Services and carries no
+`getent` to read it with. What gets created used to be `~/.profile` always, and
+zsh never reads `~/.profile` — a fresh macOS account and anybody who ran `chsh`
+before writing a rc got a file their own shell does not open. So it is
+`~/.zshrc` for zsh, `config.fish` for fish, `.profile` and `.bashrc` together
+for bash, and `.profile` for anything else. csh and tcsh
 get the POSIX line and no branch of their own: they would need a third syntax and
 a fourth set of files, neither platform starts anybody on one, and a guess
 written into a rc is worse than a line somebody adapts (docs/adr/0024).

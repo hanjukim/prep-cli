@@ -381,7 +381,17 @@ login_shell() {
   local shell="${SHELL:-}"
 
   if [ -z "$shell" ]; then
-    shell="$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7 || true)"
+    # Two databases, because `getent` is glibc's and macOS does not carry it.
+    # A Mac keeps the record in Directory Services, where `dscl` prints it as
+    # `UserShell: /bin/zsh` — a label and a value, so the value is cut out. A
+    # machine answering neither leaves $shell empty, which the caller reads as
+    # POSIX.
+    if have getent; then
+      shell="$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7 || true)"
+    elif have dscl; then
+      shell="$(dscl . -read "/Users/$(id -un)" UserShell 2>/dev/null |
+        awk '{ print $2 }' || true)"
+    fi
   fi
 
   printf '%s' "${shell##*/}"
