@@ -37,9 +37,13 @@ has nobody to ask, so it takes the same ending Enter takes — the machine-only
 one, whose next action is a `git clone` neither run needs a terminal for
 (docs/adr/0028). A run that clones ends by printing the two commands that finish
 the job, `cd` into the project and `claude`, because a script cannot move the
-shell that called it. On macOS
-the brew installer pulls in the Command Line Tools, so git arrives with it; on
-Linux apt is already the system, so it starts with `sudo apt install git`. The
+shell that called it. On macOS the brew installer pulls in the Command Line
+Tools, so git arrives with it — and until they arrive `/usr/bin/git` is there
+without git being there, a stub whose job is to ask for the tools when somebody
+runs it. So the step runs git rather than looking it up: looking it up passes on
+a machine where the very next command fails, and the sentence naming what to do
+about it sits in the branch that could not be reached. On Linux apt is already
+the system, so it starts with `sudo apt install git`. The
 script carries no tool list of its own — **prep decides and the script
 executes.** The registry stays the single answer to what a machine should hold,
 and the guidance in `--json` is the contract between the two.

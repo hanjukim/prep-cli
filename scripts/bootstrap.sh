@@ -895,6 +895,18 @@ step "2/10 git"
 
 have git ||
   fail "git is still not here after step 1. On macOS run: xcode-select --install"
+
+# A Mac without the Command Line Tools carries /usr/bin/git anyway — a stub that
+# exists to ask for the tools rather than to be git. `command -v` finds it and
+# the check above passes without meaning it, so the tool has to be run before it
+# counts: the stub exits 1 here, and this line is where a half-finished step 1
+# stops instead of somewhere further on with git blamed for it.
+#
+# Its output is dropped because the stub also opens a dialog and prints its own
+# refusal, and the sentence below is the one that says what to do about it.
+git --version >/dev/null 2>&1 ||
+  fail "git is on PATH but does not run. On macOS that is the Command Line Tools stub, which arrives without the tools themselves. Run: xcode-select --install"
+
 git --version
 
 # ---------------------------------------------------------------------------
