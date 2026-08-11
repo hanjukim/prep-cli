@@ -333,6 +333,15 @@ else: PATH is walked with `which` and no subprocess is started (docs/adr/0010).
 The only processes anywhere in chef are the fixed read-only questions the
 **pass** items ask (docs/adr/0026).
 
+**Installed is the whole of what a check result says about a tool.** Not usable:
+whether an account stands behind it, whether it holds an identity, whether it
+would succeed at the first thing somebody asks of it. Those are **pass** items
+where they are asked at all, and the split is the boundary of what PATH can
+answer — `gh` on PATH with no login is installed, and every rule a preset writes
+about `gh` is written the same way whichever it is. A tool prep can find and
+cannot vouch for is reported as found, and what it cannot vouch for is a row of
+its own.
+
 **gap**:
 An entry this machine does not hold — a check result whose status is missing. An
 unsupported entry is not a gap: another OS's package manager is not this

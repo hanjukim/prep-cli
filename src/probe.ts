@@ -1,12 +1,18 @@
 import type { CheckResult, Platform, ToolSpec, WhichFn } from "./types.ts";
 
 /**
- * The only place that reads the system.
+ * The only place that asks the machine what it holds.
  *
  * Bun.which walks PATH and returns a path string or null. It spawns no
  * subprocess, so there is no side effect like a `--version` call, and no added
- * dependency. Nothing else in prep changes the machine either (docs/adr/0010),
- * so every path through chef is a read.
+ * dependency. **Whether a tool is there is the whole of what is asked here.**
+ * Whether it is usable — an account behind it, an identity set — is a **pass**
+ * item, and `pass.ts` asks those, because they cannot be answered off PATH
+ * (docs/adr/0026 narrows docs/adr/0010). So this file is no longer the only
+ * reader of the machine, and it is still the only one that reads it for free.
+ *
+ * Nothing in either place changes the machine, so every path through chef is a
+ * read.
  */
 export const bunWhich: WhichFn = (binary) => Bun.which(binary);
 
