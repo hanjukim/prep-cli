@@ -265,8 +265,10 @@ without it nobody reads the permission files `prep setup` writes; a plugin has
 no such claim, and a marketplace is somebody else's file whose schema moves. A
 run that lost a whole machine to one is what that costs, and it happened.
 
-**Only the script changes the machine.** prep starts no process on any path
-(docs/adr/0010). doctor reads, decides, and reports, naming a command or a
+**Only the script changes the machine.** prep starts nothing but the fixed
+read-only questions its **pass** items ask — `gh auth status`, `git config
+--get` — and changes nothing on any path (docs/adr/0010, narrowed by
+docs/adr/0026). doctor reads, decides, and reports, naming a command or a
 document for each gap. That is why `sudo` is not prep's question — a shell
 script running it is ordinary, and a tool that closes secrets with `deny` never
 ends up asking for root in the same run.

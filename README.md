@@ -16,8 +16,10 @@ prep does two things and nothing else.
   `.codex/config.toml` for Codex. Where a project carries no guidance file it
   seeds `AGENTS.md` and points Claude Code at it.
 
-**prep starts no process.** Every path through it is a read, a decision, and a
-report. It prints a command; a person runs it.
+**prep changes nothing.** Every path through it is a read, a decision, and a
+report. It prints a command; a person runs it. The only processes it starts are a
+handful of fixed read-only questions — `gh auth status`, `git config --get` — and
+it never opens what they print.
 
 ## Getting started
 
