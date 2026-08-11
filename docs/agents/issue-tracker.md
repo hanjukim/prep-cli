@@ -103,7 +103,7 @@ Run `gh issue view <number> --comments`.
 
 Used by `/wayfinder`. The **map** is an issue; its **child tickets** are that
 issue's sub-issues, and they also share a milestone that carries the map's
-title.
+title. The map itself stays out of that milestone.
 
 - **Map**: an issue labelled `wayfinder:map`, holding the Destination / Notes /
   Decisions-so-far / Fog body. The map stays an issue rather than becoming a
@@ -117,6 +117,15 @@ title.
   sub-issue relation below carries the map's **order**; the milestone carries
   the **query**. Both are set by the one `gh issue create` call that opens the
   child, so they cannot drift apart.
+
+  **The map is not a member of the milestone it owns** (docs/adr/0025). Owning
+  a milestone and standing inside it are different things: the milestone
+  answers "what is the work", and the map is what the work is read from. Two
+  readers below depend on that. The frontier query takes everything the
+  milestone returns as a ticket somebody could pick up, and the progress count
+  reads the milestone's open and closed totals as the children's. Both stop
+  being true the moment the map stands in there beside them. So `--milestone`
+  is set on the child, and never on the map.
 
 - **Child ticket**: an issue created under the map and inside its milestone in
   one call —
@@ -163,7 +172,8 @@ title.
   frontier on it — read `blockedBy[].state` and decide locally, as below.
 
 - **Frontier query**: open tickets in the map's milestone, dropping any that
-  has an assignee and any that still has an open blocker.
+  has an assignee and any that still has an open blocker. The map is not in
+  the milestone, so nothing here has to exclude it.
 
   ```sh
   gh issue list --milestone "<map title>" --state open --limit 100 \
@@ -174,9 +184,13 @@ title.
           | sort_by(.number)'
   ```
 
-  That orders by issue number, which is map order as long as the children were
-  opened in the order the map lists them. When the map's sub-issue list has
-  been reordered since, take the order from the map itself and rank by it:
+  That orders by issue number, which is map order on two conditions: the
+  children were opened in the order the map lists them, and every member of
+  the milestone is a child. This form reads no sub-issue list, so a member the
+  map does not list sorts by its number like any other and can take the head.
+  The ranked form below is the one that is safe against that, and it is also
+  what to reach for when the map's sub-issue list has been reordered since —
+  it takes the order from the map itself:
 
   ```sh
   gh issue list --milestone "<map title>" --state open --limit 100 \
@@ -187,15 +201,30 @@ title.
         [ .[]
           | select(.assignees == [])
           | select([.blockedBy.nodes[] | select(.state == "OPEN")] == []) ]
-        | sort_by(.number as $n | $order | index($n))'
+        | sort_by([(.number as $n | $order | index($n) // infinite), .number])'
   ```
+
+  `// infinite` is what makes that rank safe on a ticket the map does not
+  list. `$order` holds the map's sub-issues, and a milestone can hold an issue
+  that is not one of them — an adoption that set `--milestone` and forgot
+  `--parent`, or a ticket un-parented afterwards. `index` answers `null` for
+  such a ticket, and jq sorts `null`
+  ahead of every number, so a rank reading `index` alone would hand first place
+  to the one ticket the map never listed. Sending it to the tail instead leaves
+  every listed child ahead of it, and the trailing `.number` orders the tail
+  among itself.
 
   First entry wins.
 
 - **Progress**: `gh issue view <map> --json subIssuesSummary` returns
   `{"total","completed","percentCompleted"}` for the map in one call.
   `gh api repos/{owner}/{repo}/milestones --jq '.[] | {title, open_issues,
-  closed_issues}'` gives the same count from the milestone side.
+  closed_issues}'` gives the same count from the milestone side, as long as
+  every member of the milestone is a child of the map. Keeping the map out is
+  half of that condition; the other half is that nothing else was given the
+  milestone without `--parent`, and nothing enforces it. Where the two
+  disagree, `subIssuesSummary` is the children's count and the milestone's is
+  the wider one.
 - **Claim**: `gh issue edit <n> --add-assignee @me` — the session's first
   write.
 - **Resolve**: `gh issue close <n> --comment "<answer>"`, then append a context
