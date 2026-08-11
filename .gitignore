@@ -18,3 +18,6 @@ secrets/
 # local, per-machine agent config
 .claude/settings.local.json
 .claude/worktrees/
+
+# scratch — VM runs, logs, findings; never published
+.scratch/
