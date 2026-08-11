@@ -60,8 +60,29 @@ for a language it has no table for.
 **setup** (subcommand):
 `prep setup [path] [--dry-run]`. The subcommand that writes the presets the type
 markers select. Where no `.claude/settings.json` stands it writes one; where one
-stands it reads it and **merges** into it (docs/adr/0003).
+stands it reads it and **merges** into it (docs/adr/0003). The question it
+answers is **what does this project need written**, and with no path it falls
+back to the working directory — a run that writes into where you are standing is
+the run people mean.
 _Avoid_: promote, apply
+
+**doctor** (subcommand):
+`prep doctor [path]`. The subcommand that reads and reports and changes nothing.
+The question it answers is **what is wrong**, and the two subcommands divide on
+that — on purpose, not on scope: doctor diagnoses, setup writes
+(docs/adr/0027). It reports the machine's **gaps** and its **pass** items on
+every run. Given a path it reports that project too: the project-scope pass
+items, and the **handoff** the project is still owed.
+
+**It never guesses which project it is in.** With no argument it reads the
+machine and nothing else. A path is a person naming the project, and detection
+would be a guess prep has no way to make safely — `~/.claude/settings.json`
+stands on nearly every machine running Claude Code, and people keep `~` under
+git for dotfiles, so any rule strong enough to recognise an empty directory
+recognises the home directory as well. It also keeps the bootstrap script's own
+call whole: that call names no path, so the answer it gets is the machine, byte
+for byte what it was (docs/adr/0009).
+_Avoid_: check, audit, lint
 
 **artifact**:
 One file a setup run produces. A single run produces several —
@@ -219,11 +240,18 @@ disappears only when both layers have been answered.
 _Avoid_: auto-install, extension
 
 **handoff**:
-What the harness side still owes once prep has written its files, reported at
-the end of a setup run. Three items, the ones `/setup-matt-pocock-skills` leaves
-behind: the `## Language` section of the guidance file (`AGENTS.md` or
-`CLAUDE.md`), `docs/agents/issue-tracker.md`, and `docs/agents/domain.md`. prep
-produces none of their contents. It reads them, judges each one, and names it.
+What the harness side still owes once prep has written its files. Three items,
+the ones `/setup-matt-pocock-skills` leaves behind: the `## Language` section of
+the guidance file (`AGENTS.md` or `CLAUDE.md`), `docs/agents/issue-tracker.md`,
+and `docs/agents/domain.md`. prep produces none of their contents. It reads them,
+judges each one, and names it.
+
+**Read once, framed twice.** The judgement is a pure read — a root and a file
+system in, three statuses out — so both subcommands call the same function and
+neither report can be wrong about a status while the other is right. What differs
+is the sentence around the rows: setup says what it has just written and what is
+still owed, doctor says what this project owes (docs/adr/0027). doctor reports
+them only for a project it was given a path to.
 
 There is one exception. With no guidance file at all, prep writes `AGENTS.md` as
 a **seed** (docs/adr/0005). The seed fills the Language section in, so that item
@@ -303,12 +331,21 @@ a pass item is closed by the person or not at all.
 
 **pass**:
 What doctor reads as absent but must not close: a GitHub login, a git identity,
-a login per installed harness. prep's own name comes from a kitchen, and this is
-the first term to lean on that register — the pass is the shelf a finished plate
-waits on for someone else to pick up. prep reads, decides, plates the command,
-and a person takes it; no script ever does (docs/adr/0026).
+a login per installed harness, and a directory that is not a git repository.
+prep's own name comes from a kitchen, and this is the first term to lean on that
+register — the pass is the shelf a finished plate waits on for someone else to
+pick up. prep reads, decides, plates the command, and a person takes it; no
+script ever does (docs/adr/0026).
 
-Each item is answered by a fixed read-only question — `gh auth status`,
+**Closed by a person's hands, or a person's decision.** A browser login is the
+first kind: nobody can perform it on somebody's behalf. `git init` is the second:
+anything could run it, and turning somebody's directory into a repository is
+theirs to choose (docs/adr/0027). Both are what separates a pass item from a
+**gap**, which the bootstrap script closes by running its command. Not the
+remote — a repository pushing nowhere is a normal way to work, so its absence
+says nothing worth printing.
+
+**Machine rows** are answered by a fixed read-only question — `gh auth status`,
 `git config --get` — written in the registry beside the item and run without a
 shell, the one narrowing of "prep starts no process" (docs/adr/0010). The
 answer is the exit code and nothing else: the output is never opened, so the
@@ -317,9 +354,24 @@ is **ready**, **missing**, or **unknown** — unknown meaning the check could no
 be asked, past its 5-second ceiling or with no binary to ask, and then the
 report names the check command so a person can ask it themselves. The harness
 rows are asked only of harnesses this machine holds, read off the registry's
-own table. Like the handoff, a pass item never moves the exit code: an account
-nobody has opened is a legitimate state, not a broken machine. `--json` carries
-the items under a top-level `pass` key that `scripts/gaps.ts` never reads.
+own table.
+
+**Project rows** are answered by whether one path inside the project is there,
+read through the same file system setup writes through. They start nothing, so
+the whitelist of what doctor may run is unchanged, and they are never unknown —
+a path does not time out. There is one: `.git`, which a worktree and a submodule
+carry as a file rather than a directory, so presence is the question and not what
+kind of entry it is. A project row is asked only where there is a project, which
+means only where doctor was handed a path.
+
+**One table, in the order somebody walks it.** Both scopes sit in one registry
+table and one report section, because an empty project alternates between them
+and two sections would leave a reader interleaving them to find out what comes
+first. `git init` leads: nothing below it has anywhere to land. Like the handoff,
+a pass item never moves the exit code — an account nobody has opened is a
+legitimate state, and so is a directory nobody made a repository. `--json`
+carries the items under a top-level `pass` key that `scripts/gaps.ts` never
+reads.
 _Avoid_: account check, login gap
 
 **renamed binary**:

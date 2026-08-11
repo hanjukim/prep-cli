@@ -1,4 +1,11 @@
-import type { CheckResult, Guidance, PassResult, Platform } from "../types.ts";
+import type {
+  CheckResult,
+  DoctorProject,
+  Guidance,
+  HandoffResult,
+  PassResult,
+  Platform,
+} from "../types.ts";
 
 /**
  * The machine-readable report.
@@ -14,6 +21,11 @@ export type JsonReportInput = {
   results: readonly CheckResult[];
   /** What the pass checks answered. Gated rows never arrive, so none is emitted. */
   pass?: readonly PassResult[];
+  /**
+   * The project this run was given, and what its harness side owes. Absent when
+   * doctor was given no path.
+   */
+  project?: DoctorProject;
 };
 
 /** The entry shape the contract promises outward. Owned by this module, apart from `CheckResult`. */
@@ -55,10 +67,37 @@ type JsonPassItem = {
   guidance: JsonGuidance;
 };
 
+/**
+ * One handoff item as the contract promises it.
+ *
+ * The same three fields the setup contract emits, and copied the same way there
+ * — field by field in both, so one `checkHandoff` result feeding two contracts
+ * cannot widen either of them on its own (`src/report/setup-json.ts`).
+ */
+type JsonHandoffItem = {
+  id: HandoffResult["id"];
+  status: HandoffResult["status"];
+  /** The file read, relative to the project root. null when no candidate was there. */
+  path: string | null;
+};
+
+/**
+ * The report as it goes out.
+ *
+ * `root` and `handoff` are emitted only where a project was read. A run with no
+ * argument read no project, and the absence of the two keys says exactly that —
+ * where an empty `handoff` would read as a project that owes nothing. It also
+ * leaves the bootstrap script's own call at step 8 answering byte for byte what
+ * it answered before, since that call names no path (docs/adr/0027).
+ */
 type JsonReport = {
   platform: Platform;
+  /** The project directory, as it was given. Absent when none was. */
+  root?: string;
   results: JsonResult[];
   pass: JsonPassItem[];
+  /** What the harness side owes this project. Absent when no project was read. */
+  handoff?: JsonHandoffItem[];
 };
 
 /**
@@ -99,6 +138,10 @@ function toJsonPassItem(item: PassResult): JsonPassItem {
   };
 }
 
+function toJsonHandoffItem(result: HandoffResult): JsonHandoffItem {
+  return { id: result.id, status: result.status, path: result.path };
+}
+
 /**
  * No color, no symbols, no summary wording. Suppressing guidance over a missing
  * prerequisite is the human renderer's call too, so this emits what it read.
@@ -106,8 +149,12 @@ function toJsonPassItem(item: PassResult): JsonPassItem {
 export function renderJson(input: JsonReportInput): string {
   const report: JsonReport = {
     platform: input.platform,
+    // Both project keys are undefined together where no project was read, and
+    // JSON.stringify drops them, so neither appears at all.
+    root: input.project?.root,
     results: input.results.map(toJsonResult),
     pass: (input.pass ?? []).map(toJsonPassItem),
+    handoff: input.project?.handoff.map(toJsonHandoffItem),
   };
 
   return JSON.stringify(report, null, 2) + "\n";

@@ -249,7 +249,14 @@ document for each gap. That is why `sudo` is not prep's question — a shell
 script running it is ordinary, and a tool that closes secrets with `deny` never
 ends up asking for root in the same run.
 
-The script does not move the scope of prep's own subcommands. doctor looks at
-the machine, setup looks at the project. The script calls them in order and
-nothing more.
+The script does not decide what prep decides. prep's two subcommands divide on
+purpose and not on scope: **doctor diagnoses, setup writes** (docs/adr/0027).
+doctor reads the machine on its own, and the project as well when it is handed
+one; setup writes a project's files. The script calls each for what it is for,
+executes what it reports, and adds no judgement of its own.
+
+The one call the script makes is `prep doctor --json` at step 8, and it names no
+path. That is before step 9 asks for a project, so there is no project to name
+yet — the answer is the machine, exactly as it was before doctor could read a
+project at all.
 _Avoid_: installer, wizard, provisioning

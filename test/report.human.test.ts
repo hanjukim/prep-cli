@@ -4,7 +4,7 @@ import { checkAll } from "../src/probe.ts";
 import { all, passItems } from "../src/registry.ts";
 import { renderHuman } from "../src/report/human.ts";
 import { displayWidth } from "../src/report/layout.ts";
-import type { PassResult, ToolSpec, WhichFn } from "../src/types.ts";
+import type { HandoffResult, PassResult, ToolSpec, WhichFn } from "../src/types.ts";
 
 function fakeWhich(found: Record<string, string>): WhichFn {
   return (binary) => found[binary] ?? null;
@@ -307,16 +307,19 @@ describe("human report content", () => {
   });
 });
 
-describe("the pass section", () => {
-  const item = (id: PassResult["id"], status: PassResult["status"]): PassResult => {
-    const spec = passItems().find((candidate) => candidate.id === id)!;
-    return {
-      id,
-      status,
-      checks: spec.checks.map((argv) => argv.join(" ")),
-      guidance: spec.guidance,
-    };
+/** One pass row at the status under test, with the table's own checks and guidance. */
+function item(id: PassResult["id"], status: PassResult["status"]): PassResult {
+  const spec = passItems().find((candidate) => candidate.id === id)!;
+  return {
+    id,
+    status,
+    // A project row was never asked as a command, so it hands back none.
+    checks: spec.scope === "machine" ? spec.checks.map((argv) => argv.join(" ")) : [],
+    guidance: spec.guidance,
   };
+}
+
+describe("the pass section", () => {
 
   function renderWithPass(pass: PassResult[]): string {
     const specs = all();
@@ -372,6 +375,78 @@ describe("the pass section", () => {
       item("github-login", "missing"),
       item("git-identity", "missing"),
     ]);
+    expect(output.trimEnd().split("\n").at(-1)).toBe("No gaps.");
+  });
+
+  test("a project row reads like any other, with the command that closes it", () => {
+    const output = renderWithPass([item("git-repository", "missing"), item("github-login", "ready")]);
+    expect(output).toMatch(/✗ git repository\s+git init/);
+    // One table, not two: the project row sits under the same heading as the
+    // machine rows, because that is the order somebody works through them.
+    expect(output).toContain("Pass (2)");
+  });
+});
+
+describe("the project section", () => {
+  const ROOT = "/home/me/work/project";
+
+  const handoffItem = (
+    id: HandoffResult["id"],
+    status: HandoffResult["status"],
+    path: string | null,
+  ): HandoffResult => ({ id, status, path });
+
+  function renderWithProject(handoff: HandoffResult[], pass: PassResult[] = []): string {
+    const specs = all();
+    return renderHuman({
+      platform: "darwin",
+      specs,
+      results: checkAll(specs, "darwin", fakeWhich({ ...BREW, ...FULL_DARWIN })),
+      passSpecs: passItems(),
+      pass,
+      project: { root: ROOT, handoff },
+    });
+  }
+
+  test("with no project, the header names the platform alone", () => {
+    expect(render("darwin", { ...BREW, ...FULL_DARWIN }).split("\n")[0]).toBe("prep doctor · darwin");
+  });
+
+  test("with a project, the header names it — the rows cannot say which directory they are about", () => {
+    const output = renderWithProject([handoffItem("language", "ready", "AGENTS.md")]);
+    expect(output.split("\n")[0]).toBe(`prep doctor · darwin · ${ROOT}`);
+  });
+
+  test("with no project, no handoff section opens", () => {
+    expect(render("darwin", { ...BREW, ...FULL_DARWIN })).not.toContain("Handoff");
+  });
+
+  test("the handoff rows say what the project owes, each with its own reason", () => {
+    expect(
+      renderWithProject(
+        [
+          handoffItem("language", "ready", "AGENTS.md"),
+          handoffItem("issue-tracker", "empty", "docs/agents/issue-tracker.md"),
+          handoffItem("domain-docs", "missing", null),
+        ],
+        [item("git-repository", "missing")],
+      ),
+    ).toMatchSnapshot();
+  });
+
+  test("the section is framed as the project's debt, not as what this run left behind", () => {
+    const output = renderWithProject([handoffItem("domain-docs", "missing", null)]);
+    expect(output).toContain("owed to this project");
+    // doctor wrote nothing, so it has nothing of its own to set the rows against.
+    expect(output).not.toContain("still owed.");
+    expect(output).not.toContain("Nothing owed.");
+  });
+
+  test("neither half of the project section moves the footer", () => {
+    const output = renderWithProject(
+      [handoffItem("domain-docs", "missing", null)],
+      [item("git-repository", "missing")],
+    );
     expect(output.trimEnd().split("\n").at(-1)).toBe("No gaps.");
   });
 });

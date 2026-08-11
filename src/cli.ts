@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import { HandoffError, checkHandoff } from "./handoff.ts";
 import { resolveConflicts } from "./merge.ts";
 import { awaitsApproval, nextSteps } from "./next.ts";
 import { runPass, spawnCheck, withProgress } from "./pass.ts";
@@ -12,11 +13,18 @@ import { renderHuman } from "./report/human.ts";
 import { renderJson } from "./report/json.ts";
 import { renderMergeSummary, renderSetupHuman } from "./report/setup-human.ts";
 import { renderSetupJson } from "./report/setup-json.ts";
-import { SetupError, setup as runSetup, writeSettings } from "./setup.ts";
+import {
+  SetupError,
+  nodeFs,
+  requireDirectory,
+  setup as runSetup,
+  writeSettings,
+} from "./setup.ts";
 import type {
   Artifact,
   CheckFn,
   ConflictSide,
+  DoctorProject,
   MergePlan,
   SettingsArtifact,
   SetupFs,
@@ -44,11 +52,19 @@ export type RunDeps = {
    * through — so `run` itself never reads process state.
    */
   progress?: (text: string) => void;
-  /** File system access for setup. Tests replace it with a fake. */
+  /**
+   * File system access. setup writes through it; doctor reads the project it is
+   * given through it, and reads nothing at all without one.
+   *
+   * Tests replace it with a fake.
+   */
   fs?: SetupFs;
   /** Where the harness's install record lives. Tests replace it, so no real home directory is read. */
   home?: string;
-  /** The directory setup falls back to when no path is given. */
+  /**
+   * The directory setup falls back to when no path is given. doctor has no such
+   * fallback — it never guesses which project it is in (docs/adr/0027).
+   */
   cwd?: string;
   /** How the person is asked about a merge. Absent means nobody is there to ask. */
   prompt?: SetupPrompt;
@@ -65,13 +81,16 @@ const EXIT_OBSERVED = 1;
 const EXIT_ERROR = 2;
 
 const USAGE = [
-  "Usage: prep doctor [--json]",
+  "Usage: prep doctor [path] [--json]",
   "       prep setup [path] [--dry-run] [--json]",
   "",
   "  doctor    Check this machine for the prerequisite package manager, the standard tools, and",
   "            the agent CLIs. Every gap is reported with what closes it; prep installs nothing.",
   "            It also asks a few fixed read-only questions — GitHub login, git identity, and a",
   "            login per installed agent CLI — and reports what only you can close.",
+  "            Given a path, it diagnoses that project as well: whether the directory is a git",
+  "            repository, and what the agent CLI still owes it. With no path it reads the",
+  "            machine alone — doctor never guesses which project you are in.",
   "  setup     Write the project type's Bash allowlist as permission files, one per agent CLI",
   "            installed here: .claude/settings.json for Claude Code, .codex/config.toml for Codex.",
   "            Seed AGENTS.md where no guidance file exists yet, and point Claude Code at it.",
@@ -125,7 +144,8 @@ export async function run(argv: readonly string[], deps: RunDeps = {}): Promise<
   if (command === "doctor") {
     // A flag that does nothing here would read as accepted. Say so instead.
     if (dryRun) return fail("--dry-run applies to setup only.");
-    return doctor(deps, json);
+    if (operands.length > 1) return fail(`doctor takes one path at most: ${operands.join(" ")}`);
+    return doctor(deps, { path: operands[0], json });
   }
 
   if (command === "setup") {
@@ -136,7 +156,9 @@ export async function run(argv: readonly string[], deps: RunDeps = {}): Promise<
   return fail(`Unknown subcommand: ${command}`);
 }
 
-async function doctor(deps: RunDeps, json: boolean): Promise<RunResult> {
+type DoctorOptions = { path?: string; json: boolean };
+
+async function doctor(deps: RunDeps, options: DoctorOptions): Promise<RunResult> {
   let platform;
   try {
     platform = detectPlatform(deps.platformName ?? process.platform);
@@ -148,6 +170,30 @@ async function doctor(deps: RunDeps, json: boolean): Promise<RunResult> {
       return { stdout: "", stderr: `${error.message}\n`, exitCode: EXIT_ERROR };
     }
     throw error;
+  }
+
+  const fs = deps.fs ?? nodeFs;
+
+  // Read before anything is asked of the machine, and only where a path was
+  // given: a mistyped path should be answered at once rather than after five
+  // seconds of network checks. With no path nothing here runs, so doctor opens
+  // no directory it was not handed (docs/adr/0027).
+  let project: DoctorProject | null = null;
+  if (options.path !== undefined) {
+    try {
+      requireDirectory(options.path, fs);
+      project = { root: options.path, handoff: checkHandoff(options.path, fs) };
+    } catch (error) {
+      // Two tool errors, and both are the run failing rather than the project
+      // owing something. A path that is not a directory is a typo, and a file
+      // that is there and cannot be read is no judgement at all — reporting
+      // either as "missing" would put a reason on the screen that is not true.
+      // Plain text on stderr even under --json, the same as every other error.
+      if (error instanceof SetupError || error instanceof HandoffError) {
+        return { stdout: "", stderr: `${error.message}\n`, exitCode: EXIT_ERROR };
+      }
+      throw error;
+    }
   }
 
   const specs = all();
@@ -167,15 +213,32 @@ async function doctor(deps: RunDeps, json: boolean): Promise<RunResult> {
   // Progress only where somebody is watching — `progress` arrives only then —
   // and never under --json, which the bootstrap script reads through a pipe.
   const check = deps.check ?? spawnCheck;
-  const ask = !json && deps.progress ? withProgress(check, deps.progress) : check;
-  const pass = await runPass(passItems(), installedHarnesses, ask);
+  const ask = !options.json && deps.progress ? withProgress(check, deps.progress) : check;
+  // One table, both scopes, in the order somebody walks them. The project rows
+  // are dropped where there is no project, so a run with no argument reports
+  // exactly the machine rows it reported before.
+  const pass = await runPass(
+    passItems(),
+    installedHarnesses,
+    ask,
+    project && { root: project.root, fs },
+  );
 
-  const stdout = json
-    ? renderJson({ platform, results, pass })
-    : renderHuman({ platform, specs, results, passSpecs: passItems(), pass });
+  const stdout = options.json
+    ? renderJson({ platform, results, pass, project: project ?? undefined })
+    : renderHuman({
+        platform,
+        specs,
+        results,
+        passSpecs: passItems(),
+        pass,
+        project: project ?? undefined,
+      });
 
   // Gaps alone decide the code. A pass item is a legitimate state that can last
-  // for years — an account nobody opened is not a broken machine.
+  // for years — an account nobody opened is not a broken machine, a directory
+  // nobody made a repository is not a broken project, and a handoff still owed
+  // is not a failed run.
   const hasGaps = results.some((result) => result.status === "missing");
 
   return { stdout, stderr: "", exitCode: hasGaps ? EXIT_OBSERVED : EXIT_OK };

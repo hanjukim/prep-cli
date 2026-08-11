@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
-import { runPass, spawnChecker, withProgress } from "../src/pass.ts";
+import { type PassProject, runPass, spawnChecker, withProgress } from "../src/pass.ts";
 import { passItems } from "../src/registry.ts";
-import type { CheckFn, PassSpec } from "../src/types.ts";
+import type { CheckFn, MachinePassSpec, PassSpec, ProjectPassSpec, SetupFs } from "../src/types.ts";
 
 /** Answers by the first word of the command, so a fixture reads like the machine it fakes. */
 function answering(byBinary: Record<string, boolean | null>): CheckFn {
@@ -12,8 +12,46 @@ function answering(byBinary: Record<string, boolean | null>): CheckFn {
 const BOTH_HARNESSES = new Set(["claude-code", "codex"]);
 const NO_HARNESS = new Set<string>();
 
+const PROJECT = "/project";
+
+/**
+ * A project holding exactly the given paths. Only `exists` is ever reached from
+ * here, so the rest of the boundary throws rather than answering quietly.
+ */
+function project(present: readonly string[]): PassProject {
+  const paths = new Set(present);
+  const fs: SetupFs = {
+    exists: (path) => paths.has(path),
+    isDirectory: () => {
+      throw new Error("a pass row asks whether a path is there, not what kind of entry it is");
+    },
+    read: () => {
+      throw new Error("a pass row opens no file");
+    },
+    write: () => {
+      throw new Error("a pass row writes nothing");
+    },
+  };
+  return { root: PROJECT, fs };
+}
+
+/** The machine rows of the table, for the guards that are about an argv. */
+function machineItems(): MachinePassSpec[] {
+  return passItems().filter((spec): spec is MachinePassSpec => spec.scope === "machine");
+}
+
+/** The project rows of the table, for the guards that are about a path. */
+function projectItems(): ProjectPassSpec[] {
+  return passItems().filter((spec): spec is ProjectPassSpec => spec.scope === "project");
+}
+
 describe("runPass", () => {
-  test("a machine with every answer yes reads ready on all four items", async () => {
+  test("with no project, the project rows are never asked", async () => {
+    const results = await runPass(passItems(), BOTH_HARNESSES, () => true);
+    expect(results.map((result) => result.id)).not.toContain("git-repository");
+  });
+
+  test("a machine with every answer yes reads ready on all four machine items", async () => {
     const results = await runPass(
       passItems(),
       BOTH_HARNESSES,
@@ -95,6 +133,64 @@ describe("runPass", () => {
   });
 });
 
+describe("the project rows", () => {
+  test("a project given is a project asked about, ahead of the machine rows", async () => {
+    const results = await runPass(passItems(), NO_HARNESS, () => true, project([]));
+    expect(results.map((result) => result.id)).toEqual([
+      "git-repository",
+      "github-login",
+      "git-identity",
+    ]);
+  });
+
+  test("a .git of any kind reads ready — a worktree and a submodule carry it as a file", async () => {
+    // The fake answers `exists` and refuses `isDirectory`, so a row that asked
+    // what kind of entry `.git` is would throw rather than pass quietly.
+    const results = await runPass(passItems(), NO_HARNESS, () => true, project(["/project/.git"]));
+    expect(results.find((result) => result.id === "git-repository")?.status).toBe("ready");
+  });
+
+  test("a directory that is no repository reads missing, and plates git init", async () => {
+    const results = await runPass(passItems(), NO_HARNESS, () => true, project([]));
+    const item = results.find((result) => result.id === "git-repository")!;
+    expect(item.status).toBe("missing");
+    expect(item.guidance).toEqual({ kind: "command", command: "git init" });
+  });
+
+  test("a repository with no remote produces no row at all", async () => {
+    // Working locally and pushing nowhere is a normal way to work, so there is
+    // no remote item to be missing — the table holds one project row and the
+    // repository is it.
+    const results = await runPass(passItems(), NO_HARNESS, () => true, project(["/project/.git"]));
+    const ids = results.map((result) => result.id);
+    expect(ids.filter((id) => id === "git-repository")).toHaveLength(1);
+    expect(ids.some((id) => id.includes("remote"))).toBe(false);
+  });
+
+  test("a project row names no command to ask, because nothing was asked as one", async () => {
+    const results = await runPass(passItems(), NO_HARNESS, () => true, project([]));
+    expect(results.find((result) => result.id === "git-repository")?.checks).toEqual([]);
+  });
+
+  test("a project row starts nothing — the checker is never reached for it", async () => {
+    const asked: string[] = [];
+    const check: CheckFn = (argv) => {
+      asked.push(argv.join(" "));
+      return true;
+    };
+    await runPass(projectItems(), NO_HARNESS, check, project([]));
+    expect(asked).toEqual([]);
+  });
+
+  test("the marker is read under the root it was given, not under the process", async () => {
+    const results = await runPass(passItems(), NO_HARNESS, () => true, {
+      root: "/elsewhere",
+      fs: project(["/project/.git"]).fs,
+    });
+    expect(results.find((result) => result.id === "git-repository")?.status).toBe("missing");
+  });
+});
+
 describe("spawnChecker", () => {
   // These spawn real processes, deliberately: this is the one boundary that
   // reads the machine, and the fakes above stand on its contract. None of them
@@ -146,8 +242,26 @@ describe("withProgress", () => {
 });
 
 describe("the pass table", () => {
-  test("holds the four items, machine rows first", () => {
+  test("holds the five items, in the order somebody walks them", () => {
+    // `git init` leads: nothing below it has anywhere to land without it.
     expect(passItems().map((spec) => spec.id)).toEqual([
+      "git-repository",
+      "github-login",
+      "git-identity",
+      "claude-login",
+      "codex-login",
+    ]);
+  });
+
+  test("every row is one of the two scopes, so the guards below cover the whole table", () => {
+    // The guards that follow read one scope each. Without this, a row of a third
+    // scope would escape both — and the table is the whole surface of what
+    // doctor may start (docs/adr/0026).
+    expect(machineItems().length + projectItems().length).toBe(passItems().length);
+  });
+
+  test("the machine rows keep the order a run with no argument already reported", () => {
+    expect(machineItems().map((spec) => spec.id)).toEqual([
       "github-login",
       "git-identity",
       "claude-login",
@@ -156,7 +270,7 @@ describe("the pass table", () => {
   });
 
   test("only the harness rows are gated, each on its own harness", () => {
-    const gates = new Map(passItems().map((spec) => [spec.id, spec.harness]));
+    const gates = new Map(machineItems().map((spec) => [spec.id, spec.harness]));
     expect(gates.get("github-login")).toBeUndefined();
     expect(gates.get("git-identity")).toBeUndefined();
     expect(gates.get("claude-login")).toBe("claude-code");
@@ -164,7 +278,7 @@ describe("the pass table", () => {
   });
 
   test("every check is a fixed argv of plain words — nothing for a shell to read", () => {
-    for (const spec of passItems()) {
+    for (const spec of machineItems()) {
       for (const argv of spec.checks) {
         expect(argv.length).toBeGreaterThan(0);
         for (const word of argv) {
@@ -175,12 +289,22 @@ describe("the pass table", () => {
   });
 
   test("every check asks a status and never performs a login", () => {
-    for (const spec of passItems()) {
+    for (const spec of machineItems()) {
       for (const argv of spec.checks) {
         // `codex login status` carries the word; what none may do is end on it,
         // which is where `gh auth login` and `codex login` differ from a read.
         expect(argv.at(-1)).not.toBe("login");
       }
+    }
+  });
+
+  test("a project row carries a path and no argv at all, so none of it can be started", () => {
+    for (const spec of projectItems()) {
+      expect(spec.marker.length).toBeGreaterThan(0);
+      // A relative marker, joined onto the root the run was given. An absolute
+      // one would read the same file whatever project it was handed.
+      expect(spec.marker.startsWith("/")).toBe(false);
+      expect("checks" in spec).toBe(false);
     }
   });
 
@@ -205,6 +329,7 @@ describe("gating follows the registry, not a list of names", () => {
   test("a hypothetical third harness row rides the same rule", async () => {
     const spec: PassSpec = {
       id: "codex-login",
+      scope: "machine",
       summary: "third harness login",
       checks: [["third", "auth", "status"]],
       guidance: { kind: "command", command: "third login" },

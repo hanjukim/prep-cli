@@ -1,5 +1,15 @@
 import { missingPrerequisites, rows as pair } from "../gaps.ts";
-import type { CheckResult, Guidance, PassResult, PassSpec, Platform, Row, ToolSpec } from "../types.ts";
+import type {
+  CheckResult,
+  DoctorProject,
+  Guidance,
+  PassResult,
+  PassSpec,
+  Platform,
+  Row,
+  ToolSpec,
+} from "../types.ts";
+import { handoffRows } from "./handoff.ts";
 import { INDENT, join, pad, widest } from "./layout.ts";
 
 export type HumanReportInput = {
@@ -10,8 +20,17 @@ export type HumanReportInput = {
   results: readonly CheckResult[];
   /** The pass table, for its human wording. Absent when nothing was asked. */
   passSpecs?: readonly PassSpec[];
-  /** What the pass checks answered, in table order. Gated rows never arrive. */
+  /**
+   * What the pass checks answered, in table order. Gated rows never arrive, and
+   * neither do the project rows of a run that was given no project.
+   */
   pass?: readonly PassResult[];
+  /**
+   * The project this run was given, and what its harness side still owes.
+   * Absent when doctor was given no path, which is when it read the machine
+   * alone (docs/adr/0027).
+   */
+  project?: DoctorProject;
 };
 
 /** Flattens guidance into one line. For command guidance the command is the text. */
@@ -21,7 +40,7 @@ function guidanceText(guidance: Guidance): string {
 }
 
 export function renderHuman(input: HumanReportInput): string {
-  const { platform, specs, results, passSpecs = [], pass = [] } = input;
+  const { platform, specs, results, passSpecs = [], pass = [], project } = input;
 
   const rows = pair(specs, results);
 
@@ -52,7 +71,12 @@ export function renderHuman(input: HumanReportInput): string {
   const idWidth = widest([...prerequisites, ...rest].map((row) => row.spec.id));
   const summaryWidth = widest(gaps.map((row) => row.spec.summary));
 
-  const lines: string[] = [`prep doctor · ${platform}`];
+  // The project is named in the heading, because nothing in the rows below says
+  // which directory they are about. As it was given and not resolved, which is
+  // where `prep setup · <root>` already stands — a run told `.` is told `.` back
+  // by both. A run with no project says nothing extra.
+  const heading = project ? `prep doctor · ${platform} · ${project.root}` : `prep doctor · ${platform}`;
+  const lines: string[] = [heading];
 
   if (suppressCommands) {
     lines.push("");
@@ -114,6 +138,15 @@ export function renderHuman(input: HumanReportInput): string {
         lines.push(INDENT + join(`? ${name}`, `unknown — ask it yourself: ${item.checks.join(" · ")}`));
       }
     }
+  }
+
+  // What the project owes its harness, read by the same function setup's report
+  // reads. Framed as the project's debt rather than as what a run just left
+  // behind: doctor wrote nothing here, so it has no run of its own to set the
+  // rows against (docs/adr/0027).
+  if (project && project.handoff.length > 0) {
+    lines.push("", `Handoff (${project.handoff.length}) — owed to this project`);
+    lines.push(...handoffRows(project.handoff));
   }
 
   // Only send somebody to "the commands above" when a command is actually up

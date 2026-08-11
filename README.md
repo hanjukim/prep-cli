@@ -7,9 +7,10 @@ language needs.
 
 prep does two things and nothing else.
 
-- **`prep doctor`** reads this machine and reports what it is missing — the
-  package manager, the standard tools, the agent CLIs — with the command or the
-  document that closes each gap.
+- **`prep doctor`** reads this machine and reports what is wrong — the package
+  manager, the standard tools, the agent CLIs — with the command or the document
+  that closes each gap, and the accounts only you can settle. Hand it a path and
+  it reports on that project as well. It never guesses which project you are in.
 - **`prep setup`** reads a project and writes the permission files the agent CLIs
   installed here will read: `.claude/settings.json` for Claude Code,
   `.codex/config.toml` for Codex. Where a project carries no guidance file it
@@ -52,12 +53,18 @@ prep doctor
 ## Usage
 
 ```
-prep doctor [--json]
+prep doctor [path] [--json]
 prep setup [path] [--dry-run] [--json]
 ```
 
 `--json` prints the report as data instead of prose. `--dry-run` shows what
 `setup` would write without writing it.
+
+The path is optional on both, and the two treat its absence differently. `setup`
+falls back to the working directory, because writing into where you are standing
+is the run people mean. `doctor` reads the machine alone, because a directory
+that looks like a project is a guess and a wrong guess reports on somebody's home
+directory.
 
 Exit codes are read off what the run did, and an observation is kept apart from
 a failure:

@@ -2,7 +2,9 @@
 
 **Date:** 2026-08-01
 **Status:** Accepted — supersedes ADR-0004. Narrowed by ADR-0026: doctor may
-start the fixed read-only checks the registry lists.
+start the fixed read-only checks the registry lists. Decision 5 amended by
+ADR-0027: doctor reads the project it is given, through `setup.ts`'s own file
+system boundary.
 **Sources:** ADR-0009
 
 ## Context
@@ -49,6 +51,11 @@ process on any path.**
 5. **Three boundaries remain.** `probe.ts` owns reading the machine, `setup.ts`
    owns files, `prompt.ts` owns terminal input. `prompt.ts` is used only for
    merge approval (ADR-0003).
+
+   Amended by ADR-0027. The three boundaries stand and none was added; what
+   changed is who reads through them. doctor is no longer confined to
+   `probe.ts` — given a project path it reads that project through `setup.ts`'s
+   file system, and the whole read stays a read.
 
 ## Rationale
 

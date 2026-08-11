@@ -101,12 +101,35 @@ export type HarnessId = "claude-code" | "codex";
 export type HarnessSpec = ToolSpec & { id: HarnessId; tier: "harness"; handoffCommand: string };
 
 /**
- * The four things prep can read as absent but must not close: a GitHub login, a
- * git identity, and a login per installed harness. What separates a pass item
- * from a gap is who may close it — the bootstrap script closes a gap, and a
- * pass item is closed by the person or not at all.
+ * The five things prep can read as absent but must not close: a directory that
+ * is not a git repository, a GitHub login, a git identity, and a login per
+ * installed harness. What separates a pass item from a gap is who may close it —
+ * the bootstrap script closes a gap, and a pass item is closed by the person or
+ * not at all.
+ *
+ * "Not at all" covers two things, and the repository is the second. A browser
+ * login needs a person's hands; turning somebody's directory into a repository
+ * needs a person's decision. Neither is a script's to take (docs/adr/0027).
+ *
+ * Every id names the thing that is absent, never the command that closes it —
+ * `git-repository` and not `git-init`. The command is the item's guidance, and an
+ * id naming one would read as a step to take rather than a state to be in.
  */
-export type PassItemId = "github-login" | "git-identity" | "claude-login" | "codex-login";
+export type PassItemId =
+  | "git-repository"
+  | "github-login"
+  | "git-identity"
+  | "claude-login"
+  | "codex-login";
+
+/**
+ * What answers a pass item.
+ * - machine: a fixed read-only command, asked of the machine (docs/adr/0026).
+ * - project: a path inside the project doctor was given. Asked only when there
+ *   is a project — `prep doctor` with no argument never guesses one
+ *   (docs/adr/0027).
+ */
+export type PassScope = "machine" | "project";
 
 /**
  * How one pass item stands.
@@ -116,6 +139,7 @@ export type PassItemId = "github-login" | "git-identity" | "claude-login" | "cod
  *   the exit code.
  * - unknown: a check could not be asked — it timed out, or its binary is not
  *   here. The report names the check command so a person can ask it themselves.
+ *   A project row never reaches this: a path is either there or it is not.
  */
 export type PassStatus = "ready" | "missing" | "unknown";
 
@@ -127,17 +151,22 @@ export type PassStatus = "ready" | "missing" | "unknown";
  */
 export type PassCheck = readonly string[];
 
-export type PassSpec = {
+type PassSpecCommon = {
   id: PassItemId;
   /** One-line purpose. Human-facing wording, kept out of `--json` the way `ToolSpec.summary` is. */
   summary: string;
-  /** The fixed questions, all of which must answer yes for ready. */
-  checks: readonly PassCheck[];
   /**
    * What closes the item. Always taken by a person — the bootstrap script reads
    * gaps, not pass items, so nothing here is ever run unattended.
    */
   guidance: Guidance;
+};
+
+/** A pass item the machine answers, through the fixed read-only checks. */
+export type MachinePassSpec = PassSpecCommon & {
+  scope: "machine";
+  /** The fixed questions, all of which must answer yes for ready. */
+  checks: readonly PassCheck[];
   /**
    * The harness whose absence takes this row off the table. A login question
    * for a harness nobody installed has no useful answer. Absent means the row
@@ -146,10 +175,37 @@ export type PassSpec = {
   harness?: HarnessId;
 };
 
+/** A pass item the project answers, by whether one path inside it is there. */
+export type ProjectPassSpec = PassSpecCommon & {
+  scope: "project";
+  /**
+   * The path, relative to the project root, whose presence answers the item.
+   * `.git` for a repository — a file there rather than a directory is a worktree
+   * or a submodule, and either one is a repository, so presence is the question
+   * and not what kind of entry it is.
+   */
+  marker: string;
+};
+
+/**
+ * One pass item, of either scope.
+ *
+ * A union on `scope` rather than one shape with optional fields, because the two
+ * are answered by different things: a machine row carries an argv nothing but
+ * `pass.ts` may start, and a project row carries a path. Optional fields would
+ * let a row arrive with both and neither, and the runner would have to decide
+ * which it meant.
+ */
+export type PassSpec = MachinePassSpec | ProjectPassSpec;
+
 export type PassResult = {
   id: PassItemId;
   status: PassStatus;
-  /** The checks as typed commands, so an `unknown` can name what to ask. */
+  /**
+   * The checks as typed commands, so an `unknown` can name what to ask. Empty on
+   * a project row: nothing was asked as a command, so there is no command to
+   * hand back.
+   */
   checks: string[];
   guidance: Guidance;
 };
@@ -428,6 +484,21 @@ export type HandoffResult = {
   status: HandoffStatus;
   /** The file read, relative to the project root. null when no candidate was there. */
   path: string | null;
+};
+
+/**
+ * The project a doctor run was given, and what reading it produced.
+ *
+ * One type because the pair travels together to three places — the runner, the
+ * human report, and the JSON contract — and each of them needs both halves: the
+ * rows say what is owed and the root says which directory they are about. Absent
+ * rather than empty on a run with no path, since a project nobody named and a
+ * project that owes nothing are different answers (docs/adr/0027).
+ */
+export type DoctorProject = {
+  /** The project directory, as it was given. The same as `SetupOutcome.root`. */
+  root: string;
+  handoff: readonly HandoffResult[];
 };
 
 /**
