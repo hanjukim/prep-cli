@@ -1,4 +1,4 @@
-import type { CheckResult, Guidance, Platform } from "../types.ts";
+import type { CheckResult, Guidance, PassResult, Platform } from "../types.ts";
 
 /**
  * The machine-readable report.
@@ -12,6 +12,8 @@ export type JsonReportInput = {
   platform: Platform;
   /** The current state. Emitted in the input order. */
   results: readonly CheckResult[];
+  /** What the pass checks answered. Gated rows never arrive, so none is emitted. */
+  pass?: readonly PassResult[];
 };
 
 /** The entry shape the contract promises outward. Owned by this module, apart from `CheckResult`. */
@@ -37,9 +39,26 @@ type JsonGuidance =
   | { kind: "manual"; note: string; url?: string }
   | { kind: "command"; command: string };
 
+/**
+ * One pass item as the contract promises it.
+ *
+ * The status and the commands, and nothing a check printed: the identity a
+ * login check knows — an account name, an email — is discarded before it is
+ * data, so it cannot appear here (docs/adr/0026). `scripts/gaps.ts` does not
+ * read this key, which is what keeps the bootstrap script untouched by it.
+ */
+type JsonPassItem = {
+  id: string;
+  status: PassResult["status"];
+  /** The check commands, so a consumer of an `unknown` can ask them itself. */
+  checks: string[];
+  guidance: JsonGuidance;
+};
+
 type JsonReport = {
   platform: Platform;
   results: JsonResult[];
+  pass: JsonPassItem[];
 };
 
 /**
@@ -71,6 +90,15 @@ function toJsonResult(result: CheckResult): JsonResult {
   };
 }
 
+function toJsonPassItem(item: PassResult): JsonPassItem {
+  return {
+    id: item.id,
+    status: item.status,
+    checks: [...item.checks],
+    guidance: toJsonGuidance(item.guidance),
+  };
+}
+
 /**
  * No color, no symbols, no summary wording. Suppressing guidance over a missing
  * prerequisite is the human renderer's call too, so this emits what it read.
@@ -79,6 +107,7 @@ export function renderJson(input: JsonReportInput): string {
   const report: JsonReport = {
     platform: input.platform,
     results: input.results.map(toJsonResult),
+    pass: (input.pass ?? []).map(toJsonPassItem),
   };
 
   return JSON.stringify(report, null, 2) + "\n";

@@ -28,7 +28,10 @@ the home directory, and the person at the terminal all arrive as dependencies
 covers macOS and Linux without either machine, and why no test writes into a
 real home directory. A change that reaches for `node:fs` or `process.platform`
 inside a module has crossed a seam that exists on purpose — take the boundary as
-an argument instead.
+an argument instead. One suite is the exception on purpose: the spawn
+boundary's own tests in `test/pass.test.ts` start real processes — `true`,
+`false`, `sleep`, never a real `gh`, `claude` or `codex` — because a fake
+cannot vouch for the one module allowed to spawn (docs/adr/0026).
 
 The report snapshots in `test/__snapshots__/` hold the exact prose a person
 sees. Wording is part of the output, so a deliberate change to it updates the

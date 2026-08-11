@@ -1,7 +1,8 @@
 # ADR-0010: prep does not start processes
 
 **Date:** 2026-08-01
-**Status:** Accepted — supersedes ADR-0004
+**Status:** Accepted — supersedes ADR-0004. Narrowed by ADR-0026: doctor may
+start the fixed read-only checks the registry lists.
 **Sources:** ADR-0009
 
 ## Context

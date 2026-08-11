@@ -10,8 +10,10 @@ const RECORD = "/home/.claude/plugins/installed_plugins.json";
 /** A machine with every language server on PATH, so setup's plugin half is the only variable. */
 const SERVERS_FOUND: WhichFn = (binary) => `/usr/bin/${binary}`;
 
-function run(argv: readonly string[], deps: RunDeps = {}): RunResult {
-  return runCli(argv, { home: HOME, which: SERVERS_FOUND, ...deps });
+function run(argv: readonly string[], deps: RunDeps = {}): Promise<RunResult> {
+  // The check fake answers yes to everything, so doctor's pass half is a
+  // constant here and no test starts a real process.
+  return runCli(argv, { home: HOME, which: SERVERS_FOUND, check: () => true, ...deps });
 }
 
 /** The install record as the harness writes it, for a machine holding this plugin. */
@@ -26,34 +28,35 @@ const FOUND_NONE: WhichFn = () => null;
 type Payload = {
   platform: string;
   results: { id: string; status: string; binary: string | null; path: string | null }[];
+  pass: { id: string; status: string; checks: string[]; guidance: unknown }[];
 };
 
-function json(argv: readonly string[], platformName: string, which: WhichFn) {
-  const result = run(argv, { platformName, which });
+async function json(argv: readonly string[], platformName: string, which: WhichFn) {
+  const result = await run(argv, { platformName, which });
   return { result, payload: result.stdout ? (JSON.parse(result.stdout) as Payload) : null };
 }
 
 describe("--json exit codes", () => {
-  test("no gaps is 0", () => {
-    const { result } = json(["doctor", "--json"], "darwin", FOUND_ALL);
+  test("no gaps is 0", async () => {
+    const { result } = await json(["doctor", "--json"], "darwin", FOUND_ALL);
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe("");
   });
 
-  test("gaps found is 1", () => {
-    const { result } = json(["doctor", "--json"], "darwin", FOUND_NONE);
+  test("gaps found is 1", async () => {
+    const { result } = await json(["doctor", "--json"], "darwin", FOUND_NONE);
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toBe("");
   });
 
-  test("an unsupported OS is 2 with empty stdout", () => {
-    const result = run(["doctor", "--json"], { platformName: "win32", which: FOUND_NONE });
+  test("an unsupported OS is 2 with empty stdout", async () => {
+    const result = await run(["doctor", "--json"], { platformName: "win32", which: FOUND_NONE });
     expect(result.exitCode).toBe(2);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("WSL");
   });
 
-  test("exit codes match the human output", () => {
+  test("exit codes match the human output", async () => {
     for (const [platformName, which] of [
       ["darwin", FOUND_ALL],
       ["darwin", FOUND_NONE],
@@ -61,48 +64,93 @@ describe("--json exit codes", () => {
       ["linux", FOUND_NONE],
       ["win32", FOUND_NONE],
     ] as const) {
-      const human = run(["doctor"], { platformName, which });
-      const machine = run(["doctor", "--json"], { platformName, which });
+      const human = await run(["doctor"], { platformName, which });
+      const machine = await run(["doctor", "--json"], { platformName, which });
       expect(machine.exitCode).toBe(human.exitCode);
     }
   });
 });
 
 describe("--json output", () => {
-  test("stdout parses whole as JSON", () => {
-    const { payload } = json(["doctor", "--json"], "linux", FOUND_ALL);
+  test("stdout parses whole as JSON", async () => {
+    const { payload } = await json(["doctor", "--json"], "linux", FOUND_ALL);
     expect(payload?.platform).toBe("linux");
     expect(payload?.results.length).toBeGreaterThan(0);
   });
 
-  test("the harnesses are reported alongside the standard tools", () => {
-    const { payload } = json(["doctor", "--json"], "linux", FOUND_ALL);
+  test("the harnesses are reported alongside the standard tools", async () => {
+    const { payload } = await json(["doctor", "--json"], "linux", FOUND_ALL);
     const ids = payload?.results.map((result) => result.id);
     expect(ids).toContain("claude-code");
     expect(ids).toContain("codex");
   });
 
-  test("the detected platform is carried through", () => {
-    expect(json(["doctor", "--json"], "darwin", FOUND_NONE).payload?.platform).toBe("darwin");
-    expect(json(["doctor", "--json"], "linux", FOUND_NONE).payload?.platform).toBe("linux");
+  test("the detected platform is carried through", async () => {
+    expect((await json(["doctor", "--json"], "darwin", FOUND_NONE)).payload?.platform).toBe("darwin");
+    expect((await json(["doctor", "--json"], "linux", FOUND_NONE)).payload?.platform).toBe("linux");
   });
 
-  test("no human symbols or summary wording leak in", () => {
-    const { result } = json(["doctor", "--json"], "darwin", FOUND_NONE);
+  test("no human symbols or summary wording leak in", async () => {
+    const { result } = await json(["doctor", "--json"], "darwin", FOUND_NONE);
     for (const noise of ["✓", "✗", "⚠", "prep doctor ·", "Installed", "prep does not install"]) {
       expect(result.stdout).not.toContain(noise);
     }
   });
 
-  test("flag order does not matter", () => {
-    const after = run(["doctor", "--json"], { platformName: "darwin", which: FOUND_ALL });
-    const before = run(["--json", "doctor"], { platformName: "darwin", which: FOUND_ALL });
+  test("flag order does not matter", async () => {
+    const after = await run(["doctor", "--json"], { platformName: "darwin", which: FOUND_ALL });
+    const before = await run(["--json", "doctor"], { platformName: "darwin", which: FOUND_ALL });
     expect(before).toEqual(after);
   });
 
-  test("same input gives same output and same exit code", () => {
+  test("same input gives same output and same exit code", async () => {
     const deps = { platformName: "linux", which: FOUND_ALL };
-    expect(run(["doctor", "--json"], deps)).toEqual(run(["doctor", "--json"], deps));
+    expect(await run(["doctor", "--json"], deps)).toEqual(await run(["doctor", "--json"], deps));
+  });
+});
+
+describe("--json pass", () => {
+  test("carries the pass items for the harnesses this machine holds", async () => {
+    const { payload } = await json(["doctor", "--json"], "darwin", FOUND_ALL);
+    expect(payload?.pass.map((item) => item.id)).toEqual([
+      "github-login",
+      "git-identity",
+      "claude-login",
+      "codex-login",
+    ]);
+    expect(payload?.pass.every((item) => item.status === "ready")).toBe(true);
+  });
+
+  test("with no harness, only the two machine rows arrive", async () => {
+    const { payload } = await json(["doctor", "--json"], "darwin", FOUND_NONE);
+    expect(payload?.pass.map((item) => item.id)).toEqual(["github-login", "git-identity"]);
+  });
+
+  test("an unanswered check comes through as unknown, with its command", async () => {
+    const result = await run(["doctor", "--json"], {
+      platformName: "darwin",
+      which: FOUND_ALL,
+      check: () => null,
+    });
+    const payload = JSON.parse(result.stdout) as Payload;
+    expect(payload.pass.every((item) => item.status === "unknown")).toBe(true);
+    expect(payload.pass[0]?.checks).toEqual(["gh auth status"]);
+  });
+
+  test("pass items never move the exit code, in either direction", async () => {
+    const missing = await run(["doctor", "--json"], {
+      platformName: "darwin",
+      which: FOUND_ALL,
+      check: () => false,
+    });
+    expect(missing.exitCode).toBe(0);
+  });
+
+  test("no account identifier can appear — the entry is status and commands only", async () => {
+    const { payload } = await json(["doctor", "--json"], "darwin", FOUND_ALL);
+    for (const item of payload!.pass) {
+      expect(Object.keys(item)).toEqual(["id", "status", "checks", "guidance"]);
+    }
   });
 });
 
@@ -183,12 +231,12 @@ type SetupPayload = {
   handoff: { id: string; status: string; path: string | null }[];
 };
 
-function setupJson(
+async function setupJson(
   argv: readonly string[],
   present: readonly string[],
   contents: Record<string, string> = {},
 ) {
-  const result = run(argv, { fs: fakeFs(present, contents) });
+  const result = await run(argv, { fs: fakeFs(present, contents) });
   const payload = result.stdout ? (JSON.parse(result.stdout) as SetupPayload) : null;
   // Found by kind, never by position: a consumer that indexes the array breaks
   // the moment a run produces its files in another order.
@@ -201,8 +249,8 @@ function setupJson(
 }
 
 describe("setup --json", () => {
-  test("stdout parses whole as JSON and carries the outcome", () => {
-    const { payload, settingsFile } = setupJson(["setup", PROJECT, "--json"], [
+  test("stdout parses whole as JSON and carries the outcome", async () => {
+    const { payload, settingsFile } = await setupJson(["setup", PROJECT, "--json"], [
       PROJECT,
       "/project/package.json",
     ]);
@@ -213,13 +261,13 @@ describe("setup --json", () => {
     expect(settingsFile?.settings?.permissions.allow).toContain("Bash(npm:*)");
   });
 
-  test("a file that already covers the baseline carries the status without the settings", () => {
+  test("a file that already covers the baseline carries the status without the settings", async () => {
     // What a dry run says it would write is exactly what a covered file holds.
-    const planned = setupJson(["setup", PROJECT, "--dry-run", "--json"], [
+    const planned = await setupJson(["setup", PROJECT, "--dry-run", "--json"], [
       PROJECT,
       "/project/package.json",
     ]);
-    const { result, settingsFile } = setupJson(
+    const { result, settingsFile } = await setupJson(
       ["setup", PROJECT, "--json"],
       [PROJECT, "/project/package.json"],
       { ...SEEDED, [SETTINGS]: JSON.stringify(planned.settingsFile?.settings) },
@@ -229,8 +277,8 @@ describe("setup --json", () => {
     expect(settingsFile?.settings).toBeNull();
   });
 
-  test("an existing file carries the merge: what is there, what is added, what is left to decide", () => {
-    const { result, settingsFile } = setupJson(
+  test("an existing file carries the merge: what is there, what is added, what is left to decide", async () => {
+    const { result, settingsFile } = await setupJson(
       ["setup", PROJECT, "--json"],
       [PROJECT, "/project/package.json"],
       { ...SEEDED, [SETTINGS]: JSON.stringify({ permissions: { defaultMode: "plan" } }) },
@@ -244,8 +292,8 @@ describe("setup --json", () => {
     ]);
   });
 
-  test("no marker gives an empty detected list and the shared rules only", () => {
-    const { payload, settingsFile } = setupJson(["setup", PROJECT, "--json"], [PROJECT]);
+  test("no marker gives an empty detected list and the shared rules only", async () => {
+    const { payload, settingsFile } = await setupJson(["setup", PROJECT, "--json"], [PROJECT]);
     expect(settingsFile?.status).toBe("applied");
     expect(payload?.detected).toEqual([]);
     const allow = settingsFile?.settings?.permissions.allow ?? [];
@@ -254,8 +302,8 @@ describe("setup --json", () => {
     expect(allow.some((rule) => rule.includes("npm") || rule.includes("uv"))).toBe(false);
   });
 
-  test("a dry run says planned and still shows what it would write", () => {
-    const { settingsFile } = setupJson(
+  test("a dry run says planned and still shows what it would write", async () => {
+    const { settingsFile } = await setupJson(
       ["setup", PROJECT, "--dry-run", "--json"],
       [PROJECT, "/project/pyproject.toml"],
     );
@@ -263,8 +311,8 @@ describe("setup --json", () => {
     expect(settingsFile?.settings?.permissions.allow).toContain("Bash(uv:*)");
   });
 
-  test("the plugin recommendations carry a name, a marketplace and a status, and no wording", () => {
-    const { result, payload } = setupJson(["setup", PROJECT, "--json"], [
+  test("the plugin recommendations carry a name, a marketplace and a status, and no wording", async () => {
+    const { result, payload } = await setupJson(["setup", PROJECT, "--json"], [
       PROJECT,
       "/project/package.json",
     ]);
@@ -281,8 +329,8 @@ describe("setup --json", () => {
     }
   });
 
-  test("a plugin the machine holds comes through as an entry the run writes", () => {
-    const { payload, settingsFile } = setupJson(
+  test("a plugin the machine holds comes through as an entry the run writes", async () => {
+    const { payload, settingsFile } = await setupJson(
       ["setup", PROJECT, "--json"],
       [PROJECT, "/project/package.json"],
       heldMachineWide("typescript-lsp@claude-plugins-official"),
@@ -293,8 +341,8 @@ describe("setup --json", () => {
     });
   });
 
-  test("an existing file carries the plugin entries the merge would add", () => {
-    const { settingsFile } = setupJson(
+  test("an existing file carries the plugin entries the merge would add", async () => {
+    const { settingsFile } = await setupJson(
       ["setup", PROJECT, "--json"],
       [PROJECT, "/project/package.json"],
       {
@@ -307,8 +355,8 @@ describe("setup --json", () => {
     expect(settingsFile?.merge?.addedPlugins).toEqual(["typescript-lsp@claude-plugins-official"]);
   });
 
-  test("the handoff comes through as statuses and paths", () => {
-    const { payload } = setupJson(["setup", PROJECT, "--json"], [PROJECT, "/project/package.json"], {
+  test("the handoff comes through as statuses and paths", async () => {
+    const { payload } = await setupJson(["setup", PROJECT, "--json"], [PROJECT, "/project/package.json"], {
       "/project/AGENTS.md": "# p\n\n## Language\n\nEnglish in the repository.\n",
     });
     expect(payload?.handoff).toEqual([
@@ -318,67 +366,67 @@ describe("setup --json", () => {
     ]);
   });
 
-  test("a dry run carries the handoff as well", () => {
-    const { payload } = setupJson(["setup", PROJECT, "--dry-run", "--json"], [
+  test("a dry run carries the handoff as well", async () => {
+    const { payload } = await setupJson(["setup", PROJECT, "--dry-run", "--json"], [
       PROJECT,
       "/project/package.json",
     ]);
     expect(payload?.handoff.map((item) => item.status)).toEqual(["missing", "missing", "missing"]);
   });
 
-  test("no human symbols or summary wording leak in", () => {
-    const { result } = setupJson(["setup", PROJECT, "--json"], [PROJECT, "/project/package.json"]);
+  test("no human symbols or summary wording leak in", async () => {
+    const { result } = await setupJson(["setup", PROJECT, "--json"], [PROJECT, "/project/package.json"]);
     for (const noise of ["✓", "–", "prep setup ·", "Detected", "Allowing", "Wrote"]) {
       expect(result.stdout).not.toContain(noise);
     }
   });
 
-  test("a tool error keeps stdout empty", () => {
-    const result = run(["setup", "/nope", "--json"], { fs: fakeFs([]) });
+  test("a tool error keeps stdout empty", async () => {
+    const result = await run(["setup", "/nope", "--json"], { fs: fakeFs([]) });
     expect(result.exitCode).toBe(2);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("/nope");
   });
 
-  test("exit codes match the human output", () => {
+  test("exit codes match the human output", async () => {
     for (const present of [
       [PROJECT, "/project/package.json"],
       [PROJECT],
       [PROJECT, "/project/package.json", SETTINGS],
       [],
     ]) {
-      const human = run(["setup", PROJECT], { fs: fakeFs(present) });
-      const machine = run(["setup", PROJECT, "--json"], { fs: fakeFs(present) });
+      const human = await run(["setup", PROJECT], { fs: fakeFs(present) });
+      const machine = await run(["setup", PROJECT, "--json"], { fs: fakeFs(present) });
       expect(machine.exitCode).toBe(human.exitCode);
     }
   });
 });
 
 describe("the human path is untouched", () => {
-  test("without --json the human output appears", () => {
-    const result = run(["doctor"], { platformName: "darwin", which: FOUND_NONE });
+  test("without --json the human output appears", async () => {
+    const result = await run(["doctor"], { platformName: "darwin", which: FOUND_NONE });
     expect(result.stdout).toContain("prep doctor · darwin");
     expect(() => JSON.parse(result.stdout)).toThrow();
   });
 });
 
 describe("unknown flags", () => {
-  test("gives exit code 2 and the usage text", () => {
-    const result = run(["doctor", "--verbose"], { platformName: "darwin", which: FOUND_ALL });
+  test("gives exit code 2 and the usage text", async () => {
+    const result = await run(["doctor", "--verbose"], { platformName: "darwin", which: FOUND_ALL });
     expect(result.exitCode).toBe(2);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("--verbose");
     expect(result.stderr).toContain("prep doctor");
   });
 
-  test("short flags are blocked too", () => {
-    const result = run(["doctor", "-j"], { platformName: "darwin", which: FOUND_ALL });
+  test("short flags are blocked too", async () => {
+    const result = await run(["doctor", "-j"], { platformName: "darwin", which: FOUND_ALL });
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain("-j");
   });
 
-  test("--help wins over --json", () => {
-    const result = run(["doctor", "--json", "--help"], { platformName: "darwin", which: FOUND_ALL });
+  test("--help wins over --json", async () => {
+    const result = await run(["doctor", "--json", "--help"], { platformName: "darwin", which: FOUND_ALL });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("prep doctor");
   });

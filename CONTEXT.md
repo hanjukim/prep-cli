@@ -286,8 +286,9 @@ package ships that binary under where it is not the same one, and the
 guidance that goes with it. The status is one of three — **installed**, **missing**, or **unsupported** —
 and the last one means this platform has no entry for the tool, so the question
 does not apply here rather than the answer being no. It is a read and nothing
-else: PATH is walked with `which`, no subprocess is started, and every path
-through doctor works the same way (docs/adr/0010).
+else: PATH is walked with `which` and no subprocess is started (docs/adr/0010).
+The only processes anywhere in doctor are the fixed read-only questions the
+**pass** items ask (docs/adr/0026).
 
 **gap**:
 An entry this machine does not hold — a check result whose status is missing. An
@@ -296,7 +297,30 @@ machine's concern. A missing prerequisite is the gap that invalidates the
 others' advice, since every install command below it runs through the package
 manager that is not there; the report keeps those gap lines and takes their
 commands back. Any gap at all makes doctor exit 1, which is an observation and
-not a failure — a tool error is 2.
+not a failure — a tool error is 2. What separates a gap from a **pass** item is
+who may close it: the bootstrap script closes a gap by running its command, and
+a pass item is closed by the person or not at all.
+
+**pass**:
+What doctor reads as absent but must not close: a GitHub login, a git identity,
+a login per installed harness. prep's own name comes from a kitchen, and this is
+the first term to lean on that register — the pass is the shelf a finished plate
+waits on for someone else to pick up. prep reads, decides, plates the command,
+and a person takes it; no script ever does (docs/adr/0026).
+
+Each item is answered by a fixed read-only question — `gh auth status`,
+`git config --get` — written in the registry beside the item and run without a
+shell, the one narrowing of "prep starts no process" (docs/adr/0010). The
+answer is the exit code and nothing else: the output is never opened, so the
+account name a login check knows cannot reach the report or `--json`. An item
+is **ready**, **missing**, or **unknown** — unknown meaning the check could not
+be asked, past its 5-second ceiling or with no binary to ask, and then the
+report names the check command so a person can ask it themselves. The harness
+rows are asked only of harnesses this machine holds, read off the registry's
+own table. Like the handoff, a pass item never moves the exit code: an account
+nobody has opened is a legitimate state, not a broken machine. `--json` carries
+the items under a top-level `pass` key that `scripts/gaps.ts` never reads.
+_Avoid_: account check, login gap
 
 **renamed binary**:
 The name a distribution ships a tool's executable under, when the tool's own
@@ -326,7 +350,7 @@ _Avoid_: alias, binary override
 **guidance**:
 What prep says about a gap, at one of exactly two levels: a manual note, with a
 URL where there is one, or a verified command. There is no third level, because
-prep starts no process on any path (docs/adr/0010) — it prints a command or it
+prep closes nothing on any path (docs/adr/0010) — it prints a command or it
 prints a note, and something else acts on it. A command runs unattended: every
 apt one carries `-y`, since apt asks before it pulls a dependency along and the
 bootstrap script runs these with no terminal to answer on. The person pasting

@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
 import { checkAll } from "../src/probe.ts";
-import { all } from "../src/registry.ts";
+import { all, passItems } from "../src/registry.ts";
 import { renderHuman } from "../src/report/human.ts";
 import { displayWidth } from "../src/report/layout.ts";
-import type { ToolSpec, WhichFn } from "../src/types.ts";
+import type { PassResult, ToolSpec, WhichFn } from "../src/types.ts";
 
 function fakeWhich(found: Record<string, string>): WhichFn {
   return (binary) => found[binary] ?? null;
@@ -304,6 +304,75 @@ describe("human report content", () => {
   test("the header carries the detected platform", () => {
     expect(render("darwin", {}).split("\n")[0]).toBe("prep doctor · darwin");
     expect(render("linux", {}).split("\n")[0]).toBe("prep doctor · linux");
+  });
+});
+
+describe("the pass section", () => {
+  const item = (id: PassResult["id"], status: PassResult["status"]): PassResult => {
+    const spec = passItems().find((candidate) => candidate.id === id)!;
+    return {
+      id,
+      status,
+      checks: spec.checks.map((argv) => argv.join(" ")),
+      guidance: spec.guidance,
+    };
+  };
+
+  function renderWithPass(pass: PassResult[]): string {
+    const specs = all();
+    return renderHuman({
+      platform: "darwin",
+      specs,
+      results: checkAll(specs, "darwin", fakeWhich({ ...BREW, ...FULL_DARWIN })),
+      passSpecs: passItems(),
+      pass,
+    });
+  }
+
+  test("with nothing asked, the section does not open", () => {
+    expect(render("darwin", { ...BREW, ...FULL_DARWIN })).not.toContain("Pass (");
+  });
+
+  test("a mixed pass renders every asked row", () => {
+    expect(
+      renderWithPass([
+        item("github-login", "ready"),
+        item("git-identity", "missing"),
+        item("claude-login", "unknown"),
+      ]),
+    ).toMatchSnapshot();
+  });
+
+  test("a ready item is a checkmark and its name, no command", () => {
+    const output = renderWithPass([item("github-login", "ready")]);
+    expect(output).toContain("✓ GitHub login");
+    expect(output).not.toContain("gh auth login");
+  });
+
+  test("a missing item plates the command that closes it", () => {
+    const output = renderWithPass([item("git-identity", "missing")]);
+    expect(output).toMatch(/✗ git identity\s+git config --global user\.name/);
+  });
+
+  test("an unknown item names its own checks, so a person can ask them", () => {
+    const output = renderWithPass([item("claude-login", "unknown")]);
+    expect(output).toContain("unknown — ask it yourself: claude auth status");
+    // The advice is the check, never the closing command: what is unknown is
+    // whether there is anything to close at all.
+    expect(output).not.toContain("first run opens a browser");
+  });
+
+  test("the section says who closes these — a person, never a script", () => {
+    const output = renderWithPass([item("github-login", "missing")]);
+    expect(output).toContain("closed by you");
+  });
+
+  test("the footer still counts gaps alone", () => {
+    const output = renderWithPass([
+      item("github-login", "missing"),
+      item("git-identity", "missing"),
+    ]);
+    expect(output.trimEnd().split("\n").at(-1)).toBe("No gaps.");
   });
 });
 

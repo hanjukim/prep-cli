@@ -2,11 +2,12 @@
 
 import { resolveConflicts } from "./merge.ts";
 import { awaitsApproval, nextSteps } from "./next.ts";
+import { runPass, spawnCheck, withProgress } from "./pass.ts";
 import { UnsupportedPlatformError, detectPlatform } from "./platform.ts";
 import { all as allPresets } from "./presets.ts";
 import { bunWhich, checkAll } from "./probe.ts";
 import { isInteractive, terminalPrompt } from "./prompt.ts";
-import { all } from "./registry.ts";
+import { all, passItems } from "./registry.ts";
 import { renderHuman } from "./report/human.ts";
 import { renderJson } from "./report/json.ts";
 import { renderMergeSummary, renderSetupHuman } from "./report/setup-human.ts";
@@ -14,6 +15,7 @@ import { renderSetupJson } from "./report/setup-json.ts";
 import { SetupError, setup as runSetup, writeSettings } from "./setup.ts";
 import type {
   Artifact,
+  CheckFn,
   ConflictSide,
   MergePlan,
   SettingsArtifact,
@@ -31,6 +33,17 @@ export type RunDeps = {
    * for the language server a plugin points at and for the harness that is here.
    */
   which?: WhichFn;
+  /**
+   * How doctor asks the fixed read-only pass checks (docs/adr/0026). Tests
+   * replace it the way they replace `which`, so no test starts a real process.
+   */
+  check?: CheckFn;
+  /**
+   * Where a slow pass check names itself. Handed in only when a stream is a
+   * terminal — the same way `prompt` arrives only when there is one to ask
+   * through — so `run` itself never reads process state.
+   */
+  progress?: (text: string) => void;
   /** File system access for setup. Tests replace it with a fake. */
   fs?: SetupFs;
   /** Where the harness's install record lives. Tests replace it, so no real home directory is read. */
@@ -57,6 +70,8 @@ const USAGE = [
   "",
   "  doctor    Check this machine for the prerequisite package manager, the standard tools, and",
   "            the agent CLIs. Every gap is reported with what closes it; prep installs nothing.",
+  "            It also asks a few fixed read-only questions — GitHub login, git identity, and a",
+  "            login per installed agent CLI — and reports what only you can close.",
   "  setup     Write the project type's Bash allowlist as permission files, one per agent CLI",
   "            installed here: .claude/settings.json for Claude Code, .codex/config.toml for Codex.",
   "            Seed AGENTS.md where no guidance file exists yet, and point Claude Code at it.",
@@ -79,7 +94,7 @@ function fail(reason: string): RunResult {
 }
 
 /** Parses arguments and decides the exit code. Touches no process state, so it tests as is. */
-export function run(argv: readonly string[], deps: RunDeps = {}): RunResult {
+export async function run(argv: readonly string[], deps: RunDeps = {}): Promise<RunResult> {
   const commands: string[] = [];
   let json = false;
   let help = false;
@@ -121,7 +136,7 @@ export function run(argv: readonly string[], deps: RunDeps = {}): RunResult {
   return fail(`Unknown subcommand: ${command}`);
 }
 
-function doctor(deps: RunDeps, json: boolean): RunResult {
+async function doctor(deps: RunDeps, json: boolean): Promise<RunResult> {
   let platform;
   try {
     platform = detectPlatform(deps.platformName ?? process.platform);
@@ -137,14 +152,30 @@ function doctor(deps: RunDeps, json: boolean): RunResult {
 
   const specs = all();
   const which = deps.which ?? bunWhich;
-  // A read and nothing else, on every path (docs/adr/0010). doctor asks no
-  // question, so there is no interactive branch and no --json branch guarding
-  // one: a run reading from a pipe and a run at a terminal do the same work.
+  // A read on every path, and beyond the PATH reads only the fixed pass checks
+  // below (docs/adr/0010, narrowed by docs/adr/0026). doctor asks no question,
+  // so there is no interactive branch: a run reading from a pipe and a run at a
+  // terminal do the same work.
   const results = checkAll(specs, platform, which);
 
+  // The pass rows for a harness are asked only where the harness is, read off
+  // the check that just ran rather than a second walk over PATH.
+  const installedHarnesses = new Set(
+    results.filter((result) => result.status === "installed").map((result) => result.id),
+  );
+
+  // Progress only where somebody is watching — `progress` arrives only then —
+  // and never under --json, which the bootstrap script reads through a pipe.
+  const check = deps.check ?? spawnCheck;
+  const ask = !json && deps.progress ? withProgress(check, deps.progress) : check;
+  const pass = await runPass(passItems(), installedHarnesses, ask);
+
   const stdout = json
-    ? renderJson({ platform, results })
-    : renderHuman({ platform, specs, results });
+    ? renderJson({ platform, results, pass })
+    : renderHuman({ platform, specs, results, passSpecs: passItems(), pass });
+
+  // Gaps alone decide the code. A pass item is a legitimate state that can last
+  // for years — an account nobody opened is not a broken machine.
   const hasGaps = results.some((result) => result.status === "missing");
 
   return { stdout, stderr: "", exitCode: hasGaps ? EXIT_OBSERVED : EXIT_OK };
@@ -262,11 +293,17 @@ function setup(deps: RunDeps, options: SetupOptions): RunResult {
   return { stdout, stderr: "", exitCode: setupExitCode(outcome, options.dryRun) };
 }
 
-export function main(argv: readonly string[] = Bun.argv.slice(2)): never {
+export async function main(argv: readonly string[] = Bun.argv.slice(2)): Promise<never> {
   let result: RunResult;
   try {
     // The prompt is handed in only when there is a terminal to ask through.
-    result = run(argv, { prompt: isInteractive() ? terminalPrompt : undefined });
+    // Progress rides the bootstrap script's own condition ([ -t 1 ] || [ -t 2 ])
+    // and goes to stderr, since stdout is the report.
+    const terminal = process.stdout.isTTY === true || process.stderr.isTTY === true;
+    result = await run(argv, {
+      prompt: isInteractive() ? terminalPrompt : undefined,
+      progress: terminal ? (text) => process.stderr.write(text) : undefined,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`prep: unexpected error — ${message}\n`);
@@ -278,4 +315,4 @@ export function main(argv: readonly string[] = Bun.argv.slice(2)): never {
   process.exit(result.exitCode);
 }
 
-if (import.meta.main) main();
+if (import.meta.main) await main();
