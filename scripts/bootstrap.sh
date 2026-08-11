@@ -789,6 +789,20 @@ if [ "$PLATFORM" = "macos" ]; then
   fi
 
   have brew || fail "Homebrew is installed but brew is not on PATH. Open a new terminal and try again."
+
+  # Homebrew 6 asks "Do you want to proceed with the installation? [y/n]" before
+  # every install and calls that mode the default. It only asks where stdin is a
+  # terminal, which the one-liner's stdin is not — but a saved copy run as
+  # `bash bootstrap.sh` has one, and there the run stops at step 4 forever with
+  # no message and nobody to answer. A real terminal is the case this script
+  # exists for, so it says yes once for the whole run.
+  #
+  # The installs it reaches are this script's own: `brew install node` and
+  # `brew install gh`. Step 8 does not need it — a gap command runs as
+  # `bash -c "$command" </dev/null`, so brew has nobody to ask there — but the
+  # answer belongs to the run rather than to two call sites, and step 8 stays
+  # covered whatever prep composes for it later (docs/adr/0009 decision 3).
+  export HOMEBREW_NO_ASK=1
 else
   # apt is already the system here, so there is nothing to install before it.
   have apt-get ||
