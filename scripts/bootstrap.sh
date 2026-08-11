@@ -200,8 +200,18 @@ have() {
   [ -n "$path" ]
 }
 
-# Put a directory this script installs into on PATH, if what belongs there is
-# already on the disk.
+# Put a directory on PATH for the rest of this run, once however often it is
+# asked for.
+#
+#   $1 the directory
+put_on_path() {
+  case ":$PATH:" in
+    *":$1:"*) ;;
+    *) export PATH="$1:$PATH" ;;
+  esac
+}
+
+# The same, for a directory whose tool may not be installed yet.
 #
 # A tool an earlier run installed is on the disk, and a shell that started
 # before that run carries none of the directories that run wrote into its rc
@@ -210,6 +220,9 @@ have() {
 # installer appending to a rc file again, every run, forever. The disk is read
 # first instead, which is the shape step 1 takes for Homebrew.
 #
+# It is a question, not a promise: a step that needs the directory on PATH
+# whatever answered its command calls `put_on_path` and does not ask.
+#
 #   $1 the directory
 #   $2 the command that lives in it once it is installed
 put_installed_on_path() {
@@ -217,10 +230,7 @@ put_installed_on_path() {
 
   [ -x "$dir/$cmd" ] || return 0
 
-  case ":$PATH:" in
-    *":$dir:"*) ;;
-    *) export PATH="$dir:$PATH" ;;
-  esac
+  put_on_path "$dir"
 }
 
 # The one-liner pipes this script into bash, so stdin carries the script's own
@@ -413,7 +423,7 @@ login_shell() {
       shell="$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7 || true)"
     elif have dscl; then
       shell="$(dscl . -read "/Users/$(id -un)" UserShell 2>/dev/null |
-        awk '{ print $2 }' || true)"
+        awk '/^UserShell:/ { print $2 }' || true)"
     fi
   fi
 
@@ -950,10 +960,13 @@ if have bun; then
   echo "bun is already here."
 else
   curl -fsSL https://bun.sh/install | bash
-
-  # It landed a moment ago, so this shell has still never read a rc naming it.
-  put_installed_on_path "$BUN_INSTALL/bin" bun
 fi
+
+# Unconditionally this time, and not only where bun came from here. Step 7 runs
+# `bun link`, which puts prep in $BUN_INSTALL/bin whatever answered `bun` — so a
+# machine whose bun arrived through brew needs this directory on PATH too, and
+# without it step 7 fails on a prep it just linked.
+put_on_path "$BUN_INSTALL/bin"
 
 # bun's installer writes a rc of its own, and this writes one as well. It is not
 # a duplicate of it in any way that costs: bun writes `$BUN_INSTALL/bin`, this
@@ -1056,10 +1069,6 @@ if have claude; then
   echo "Claude Code is already here."
 else
   curl -fsSL "$CLAUDE_INSTALL_URL" | bash
-
-  # The installer put it in ~/.local/bin, which this shell may have started
-  # without.
-  put_installed_on_path "$HOME/.local/bin" claude
 fi
 
 # ~/.local/bin is on PATH for the rest of this run either way, which is what

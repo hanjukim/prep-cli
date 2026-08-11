@@ -174,11 +174,18 @@ not carry — `~/.local/bin`, `~/.bun/bin`, `/opt/homebrew/bin`. The script expo
 each directory as it goes and confirms the binary by name before moving on, so a
 link that installed and cannot be found stops the run there (docs/adr/0013).
 
-Each step reads the disk before it asks PATH, because a terminal that started
-before the last run carries none of the directories that run wrote down. Asked
-the other way round, a machine that already holds the tool answers no and the
-step installs it over itself — Homebrew over Homebrew, and bun over bun with
-bun's own installer appending to a rc file again every time.
+A step that installs into a directory of its own reads the disk before it asks
+PATH, because a terminal that started before the last run carries none of the
+directories that run wrote down. Asked the other way round, a machine that
+already holds the tool answers no and the step installs it over itself —
+Homebrew over Homebrew, and bun over bun with bun's own installer appending to a
+rc file again every time. Node and gh do not need it: brew is on PATH by then
+and answers for both.
+
+Reading the disk is a question and not a promise. Where a directory has to be on
+PATH whatever answered for the tool, the step says so outright: `bun link` in
+step 7 puts prep in bun's bin directory however bun itself arrived, so step 3
+puts that directory on PATH without asking.
 
 Exporting covers this run only. The two tarballs edit no rc at all, and the
 installers that do — bun's and Claude Code's — edit one when they can identify
@@ -216,7 +223,8 @@ before writing a rc got a file their own shell does not open. So it is
 for bash, and `.profile` for anything else. csh and tcsh
 get the POSIX line and no branch of their own: they would need a third syntax and
 a fourth set of files, neither platform starts anybody on one, and a guess
-written into a rc is worse than a line somebody adapts (docs/adr/0024).
+written into a rc is worse than a line somebody adapts (docs/adr/0024,
+docs/adr/0029).
 
 **The one terminal no rc file reaches is the one running the script.** It read
 its rc before any of this existed, so a command named for a person to run
