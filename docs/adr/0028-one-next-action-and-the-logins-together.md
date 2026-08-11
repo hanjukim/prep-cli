@@ -4,12 +4,17 @@
 **Status:** Accepted — extends ADR-0024 decision 8, which drew one line between
 two rules and now draws the whole next action there, and reorders what ADR-0021
 decision 4 and ADR-0013 decision 5 put on the ending. What those records decided
-stands: a login is handed over rather than run, and the machine-only ending is
-where the run that made none reads about it. What changes is which of the things
-an ending prints is the one it highlights.
-**Sources:** ADR-0009, ADR-0013, ADR-0017, ADR-0020, ADR-0021, ADR-0024, issue
-#5, and three real `curl … | bash` runs on fresh `debian:trixie` containers on
-2026-08-06
+stands: a login is handed over rather than run. What changes is which of the
+things an ending prints is the one it highlights.
+
+Decision 5 amended in place by #24, once ADR-0026 and ADR-0027 gave prep the
+GitHub login and the git identity: the ending no longer names either, and points
+at `prep doctor` instead. The clause that used to stand here — "the machine-only
+ending is where the run that made none reads about it" — is what that amendment
+takes back.
+**Sources:** ADR-0009, ADR-0013, ADR-0017, ADR-0020, ADR-0021, ADR-0024,
+ADR-0026, ADR-0027, issues #5 and #24, and three real `curl … | bash` runs on
+fresh `debian:trixie` containers on 2026-08-06
 
 ## Context
 
@@ -60,22 +65,47 @@ reference.**
    block of its own above it. Nothing else in the ending is emphasised, which is
    what makes the block readable as one action instead of two.
 3. **Everything else goes under `==> For reference`.** The heading is what turns
-   a list of facts into a list of facts: gaps that would not install, the logins
-   the script cannot perform, the git identity, Codex, `prep doctor`. The run's
-   own leftovers come first, because they are the only lines about what just
-   happened rather than about what always holds.
+   a list of facts into a list of facts: gaps that would not install, tools the
+   run could not name, the logins no report can perform, Codex, `prep doctor`.
+   The run's own leftovers come first, because they are the only lines about what
+   just happened rather than about what always holds. (The git identity was on
+   this list too, until #24 — see decision 5.)
 4. **The machine-only ending's next action is `git clone` and `prep setup`.**
    Not `curl … | bash`. prep is installed by then, so both commands are ordinary
    ones, and neither needs a terminal to be asked on — which is what the
    ending's terminal / no-terminal branch existed for, so it goes. `SCRIPT_URL`
    keeps its one reader: the stop at step 9, which is resuming an unfinished run
    and does need the one-liner (ADR-0024 decision 3).
-5. **The GitHub login moves under reference on that ending, and stays there.**
-   ADR-0021 decision 4 put it on the machine-only ending because that run needed
-   no account and the work after it does. It is still said, still guarded by
-   `gh auth status`, still ahead of the two identity commands — but as reference
-   beside the clone it serves, not as the action. The action is getting the
-   project; the login is what the clone may need when the project is private.
+5. **The GitHub login moves under reference on that ending.** ADR-0021 decision 4
+   put it on the machine-only ending because that run needed no account and the
+   work after it does. It is still said, still guarded by `gh auth status`, still
+   ahead of the two identity commands — but as reference beside the clone it
+   serves, not as the action. The action is getting the project; the login is
+   what the clone may need when the project is private.
+
+   **Amended by #24: it is not said there at all any more, and neither is the
+   identity.** This decision moved both under reference on the assumption that
+   the ending is where a machine-only run reads them. That held while prep knew
+   nothing about accounts. It stopped holding when the **pass** items landed
+   (ADR-0026): prep reads the GitHub login and the git identity now, and the
+   harness logins the script never knew about, so the ending asked
+   `gh auth status` and `git config --get` to say what a report already says
+   better. Both guarded blocks are gone and the ending names `prep doctor` once
+   instead, with a sentence saying what it reports. What ADR-0021 decided is
+   untouched — the item is not dropped, it moved to the tool whose job is
+   reading it, which is the rule the tool list has followed since ADR-0009:
+   **prep decides and the script executes.** The two reads survive on the project
+   branch, where they are about this run rather than the machine's standing
+   state: step 9 stops in front of a login a clone needs, and offers an identity
+   filled in from the account that login just proved.
+
+   One sentence of the deleted block stays, unguarded: a private repository
+   answers an unauthenticated request with 404 rather than a refusal, so a clone
+   without a login fails while naming the wrong problem. That is about the
+   `git clone` this ending just printed rather than about the machine, and the
+   ending is the only place somebody reads it before hitting it. It asks nothing
+   and names no command, so it decides nothing — which is the whole difference
+   between it and the block it came from.
 6. **`claude_login_note` is one wording, printed from both places that send
    somebody to a browser.** The closing message, and the stop in front of the
    GitHub login — which is a run that ends before reaching the closing message,

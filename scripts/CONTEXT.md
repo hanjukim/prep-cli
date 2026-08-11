@@ -89,17 +89,21 @@ email defaults to the `<id>+<login>@users.noreply.github.com` address GitHub
 hands out for commits, which is safe to publish and always right for that
 account. Enter takes both, so the run that follows a login needs no typing at
 all. Asking still needs a terminal, so a run without one stops and names the two
-commands instead. A run that names no project never reaches the step, and its
-closing message names the same two commands rather than asking — the machine-only
-ending is where that run reads what is left for it (docs/adr/0021). The second
-thing is the GitHub login above — sent away for mid-run on the project branch,
-and named on the machine-only ending when gh carries none. That run needed no
-account and the work after it does: this script is served from GitHub, and the
-guidance prep writes sends its agents to a GitHub tracker they reach through gh.
-Named there it stops nothing, since the run has already
-finished, and it is printed ahead of the two identity commands — the order the
-project branch runs the pair in — because a login is what turns those commands
-into answers somebody can be offered. The third is the Claude Code login: the
+commands instead. A run that names no project never reaches the step at all
+(docs/adr/0021). The second thing is the GitHub login above — sent away for
+mid-run on the project branch, where a clone needs it.
+
+**The ending says what this run did, and leaves the machine's standing state to
+prep.** Both of those answers were once the ending's: it asked
+`gh auth status` and `git config --get` in its own shell and named whichever came
+back empty. prep reads both now, as **pass** items, and the harness logins with
+them (docs/adr/0026), so the ending names neither and points at `prep doctor`
+instead (docs/adr/0027). The rule that moved them is the one the tool list already
+follows — **prep decides and the script executes.** Two actors answering the same
+question are two answers free to drift, and on the day they differ nobody can say
+which read the machine. What the ending still reports is this run's own leftovers:
+gaps that would not install, and tools it could not give their own name. The third
+thing a person is told about is the Claude Code login: the
 first `claude` run authenticates through a browser, which the script cannot do
 for anybody. **The two browser logins are handed over together wherever a run
 ends in front of one**, so somebody opens a browser once: the closing message
@@ -115,8 +119,9 @@ login from then on. Nothing about it is waiting on a browser this trip.
 
 **The ending names one next action, and prints everything else as reference.**
 A finished run has several things to report — where the project is, gaps that
-would not close, two logins no script can perform, a command that reads the
-machine — and exactly one of them is the thing to do next. That one is the **next
+would not close, tools it could not name, two logins no report can perform, and
+the command that reports the rest — and exactly one of them is the thing to do
+next. That one is the **next
 action**: drawn between two rules under a `Next:` headline, with the commands that
 perform it and nothing else, above a `For reference` heading that turns the rest
 into reference (docs/adr/0028). Somebody who reads the first block and stops has

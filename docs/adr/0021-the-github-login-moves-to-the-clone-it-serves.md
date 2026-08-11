@@ -6,8 +6,12 @@ question ADR-0020 left open. The chain rule that record states is untouched:
 the chain still carries what the destination needs at run time. What changes is
 where one link falls, now that one of the two clones behind it has gone away.
 ADR-0028 keeps decision 4 and moves what it hands over: the identity and the
-GitHub login are still named on the machine-only ending, now under its reference
-heading rather than as the thing to do next.
+GitHub login went under that ending's reference heading rather than standing as
+the thing to do next, and #24 then took both off the ending entirely. Decision 4
+still stands — the login belongs to the clone that needs it, and a machine-only
+run is still told what it is missing. What changed is who tells it: `prep doctor`
+reads the login and the identity as **pass** items (ADR-0026), so the script
+stopped reading them for its own ending (ADR-0027).
 **Sources:** ADR-0009, ADR-0013, ADR-0015, ADR-0017, ADR-0020, issue #2, an
 observed refusal from `gh repo view` on a public repository with no login, and a
 real `curl … | bash` run on WSL on 2026-08-05
@@ -88,6 +92,14 @@ a repository was actually named.
    and the same voice the closing message uses for the Claude Code login. The
    machine-only ending is a place where things are handed over, and this is one
    more of them.
+
+   **Amended by #24: told, but not by this script.** What this decision settled
+   is that the machine-only run is told rather than asked, and that stands. Which
+   actor tells it has moved: prep reads the identity as a **pass** item
+   (ADR-0026), so the ending stopped running `git config --get` to decide whether
+   to name it and points at `prep doctor` instead (ADR-0027). The two commands
+   are still named to whoever asks for them — by the tool whose job is reading
+   the machine.
 5. **The chain is eleven steps rather than twelve, and nothing else is
    reordered.** Steps 6 and 7 are gone from the numbering, so what was step 8
    onwards moves up. The order of the links themselves — package manager, git,
@@ -98,11 +110,11 @@ a repository was actually named.
 link because git installed and git usable are not the same thing: with no
 `user.name` and `user.email` every commit is refused, and the person finds that
 out at the end of their first piece of work rather than at the start. A
-machine-only run now ends without one. What it gets instead is two commands in
-the closing message, which is where that run already reads what is left for it to
-do — the Claude Code login is named there and nowhere else. The alternative was
-to ask outright on that branch, which spends a question on somebody who asked for
-a machine and pressed Enter to get one.
+machine-only run now ends without one. What it gets instead is two commands it can
+read whenever it asks for them — in the closing message when this record was
+written, and from `prep doctor` since #24. The alternative was to ask outright on
+that branch, which spends a question on somebody who asked for a machine and
+pressed Enter to get one.
 
 ## Rationale
 

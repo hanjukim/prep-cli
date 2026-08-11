@@ -34,8 +34,10 @@ const RULE = SCRIPT.match(/^RULE="(.*)"$/m)?.[1] ?? "";
  * guard leaves `$BOLD` and the rest empty and the text arrives plain, which is
  * what the assertions below read.
  *
- * git is asked for the identity, so the global configuration is pointed at
- * /dev/null: what this machine commits under is not this test's business.
+ * The global git configuration is pointed at /dev/null. Nothing these functions
+ * run reads it any more — the ending stopped asking `git config --get` when that
+ * answer became prep's (docs/adr/0027) — and the pin stays so that a read added
+ * back gets a fixed answer here rather than whatever this machine commits under.
  */
 function run(functions: string[], snippet: string): string {
   const result = Bun.spawnSync({
@@ -157,24 +159,43 @@ describe("a run that stopped at the machine", () => {
     expect(ending).not.toInclude("PREPARED_REPO");
   });
 
-  test("names the GitHub login the clone above may need, as reference", () => {
-    expect(reference(ending)).toInclude("auth login --git-protocol https --web");
-    expect(reference(ending)).toInclude("https://github.com/login/device");
+  // The ending used to name the GitHub login and the git identity itself, each
+  // behind a check it ran in its own shell. Both are prep's to report now
+  // (docs/adr/0027), and these hold that the script stopped rather than that it
+  // was quietly moved: the commands are gone, and so are the reads behind them.
+  test("names neither the GitHub login nor the git identity", () => {
+    expect(ending).not.toInclude("auth login");
+    expect(ending).not.toInclude("github.com/login/device");
+    expect(ending).not.toInclude("git config --global");
   });
 
-  test("leaves the login out when there is one already", () => {
-    expect(closing({ projectReady: false, loggedIn: true })).not.toInclude("auth login");
-  });
-
-  test("names the git identity, since this path never asked for one", () => {
-    expect(reference(ending)).toInclude('git config --global user.name "Your Name"');
-    expect(reference(ending)).toInclude("git config --global user.email");
-  });
-
-  test("offers the login ahead of the identity it would answer for", () => {
-    expect(reference(ending).indexOf("auth login")).toBeLessThan(
-      reference(ending).indexOf("git config --global user.name"),
+  test("says the same thing whatever gh answers, because it no longer asks", () => {
+    expect(closing({ projectReady: false, loggedIn: true })).toBe(
+      closing({ projectReady: false, loggedIn: false }),
     );
+  });
+
+  test("points at prep doctor instead, once, and says what it will report", () => {
+    // The pointer itself, not every mention of the command: the failed-links
+    // list names `prep doctor` too, for a different reason and only when it has
+    // something in it.
+    const pointer = /prep doctor reports what this machine still owes you/g;
+    expect(reference(ending).match(pointer)).toHaveLength(1);
+    expect(reference(ending)).toInclude("GitHub login");
+    expect(reference(ending)).toInclude("git name and email");
+    expect(reference(ending)).toInclude("login for each agent CLI");
+  });
+
+  test("still says why the clone above may need a login, without asking whether it does", () => {
+    // The one fact the deleted block carried that is about this run's next action
+    // rather than about the machine. It names no command and reads nothing, so it
+    // survives the move without deciding anything (docs/adr/0027).
+    expect(reference(ending)).toInclude("404");
+    expect(reference(ending)).toInclude("If that repository is private");
+  });
+
+  test("the cloning ending says nothing about it, having already cloned", () => {
+    expect(closing({ projectReady: true })).not.toInclude("404");
   });
 });
 

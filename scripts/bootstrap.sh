@@ -688,8 +688,9 @@ $(claude_login_note)"
 # It runs on the project branch, after the login, because the login already
 # knows both answers — so this offers them and the person presses Enter twice. A
 # project hosted outside github.com reaches it with no login, and it asks
-# outright. A run that names no project never reaches it at all, and its closing
-# message names these two commands instead (docs/adr/0021).
+# outright. A run that names no project never reaches it at all, and reads about
+# the identity from `prep doctor` rather than from this script's ending, which
+# stopped deciding it (docs/adr/0021, docs/adr/0027).
 ensure_git_identity() {
   local git_name git_email suggested_name suggested_email gh_id gh_login gh_user
 
@@ -1153,10 +1154,16 @@ fi
 # What a finished run says, and in what order (docs/adr/0028).
 #
 # A run has several things to report — where the project is, gaps that would not
-# install, two logins it cannot perform, a command that reads the machine — and
-# exactly one of them is the next action. So that one is drawn on its own above a
-# heading that turns everything after it into reference, and somebody who reads
-# the first block and stops has read the thing to do.
+# install, tools it could not name, two logins no report can perform, and the
+# command that reports the rest — and exactly one of them is the next action. So
+# that one is drawn on its own above a heading that turns everything after it
+# into reference, and somebody who reads the first block and stops has read the
+# thing to do.
+#
+# What is not here is the machine's standing state. The GitHub login and the git
+# identity were named from this function once, each behind a check run in this
+# shell; they are prep's to report now, and the ending points at the command that
+# does it (docs/adr/0027).
 #
 # A script cannot move the shell that called it, nor log in for anybody, so every
 # command here is printed rather than run, in full and ready to paste.
@@ -1193,46 +1200,30 @@ closing_message() {
     printf '%s' "$FAILED_LINKS"
   fi
 
+  # The GitHub login and the git identity used to be asked about here, each
+  # behind its own check — `gh auth status` and `git config --get`. Both are gone
+  # (docs/adr/0027). They are the machine's standing state rather than anything
+  # this run did, and prep reads them now: they are two of its **pass** items,
+  # which the doctor line below points at. The script decided them in its own
+  # shell while prep knew nothing about accounts, and once prep knows, the same
+  # knowledge in two places is two places free to drift. **prep decides and the
+  # script executes.**
+  #
+  # What is left here says only what this run did — the two lists above, and the
+  # one thing the next action above needs — and what no report can perform for
+  # anybody.
   if [ "$PROJECT_READY" -eq 0 ]; then
-    # gh is installed here and logged in to nothing, because this run cloned
-    # nothing that needed an account (docs/adr/0021). The work this machine is
-    # for does need one: the clone above is private for many people, and an
-    # unauthenticated request for a private repository comes back 404 rather than
-    # a refusal, so it fails while describing the wrong problem. Beyond that,
-    # this script is served from GitHub and the guidance prep writes points its
-    # agents at a GitHub tracker they reach through gh.
+    # About the `git clone` this ending just printed, not about the machine. A
+    # private repository answers an unauthenticated request with 404 rather than a
+    # refusal, so a clone without a login fails while describing the wrong
+    # problem, and this is the one place somebody reads that before hitting it.
     #
-    # It is named rather than run for the reason the project step names it too —
-    # the login reads the terminal itself, and this script is reading a pipe. And
-    # it comes before the identity below, the same order the project branch runs
-    # them in, because it is what turns those two commands into answers somebody
-    # can be offered.
-    if ! gh auth status >/dev/null 2>&1; then
-      printf '\ngh is installed and logged in to nothing. This run needed no account,\n'
-      printf 'and the clone above may: a private repository answers an unauthenticated\n'
-      printf 'request with 404 rather than a refusal. Log in before it, or when it\n'
-      printf 'suits you:\n'
-      printf '  %s auth login --git-protocol https --web\n' "$GH_BIN"
-      printf 'The path is written out in full for a terminal that has read neither the\n'
-      printf 'line above nor a shell rc since gh was installed. It prints a one-time\n'
-      printf 'code. If no browser opens, open https://github.com/login/device in any\n'
-      printf 'browser and enter the code there.\n'
-    fi
-
-    # The identity sits behind the GitHub login, and both belong to the project
-    # branch this run did not take (docs/adr/0021). So it is named here rather
-    # than asked for — this is where a run that stops at the machine reads what is
-    # left for it. A second run that names a project logs in first and offers
-    # both answers instead.
-    if [ -z "$(git config --get user.name 2>/dev/null || true)" ] ||
-      [ -z "$(git config --get user.email 2>/dev/null || true)" ]; then
-      printf '\ngit has no name and email to commit under yet, and every commit needs\n'
-      printf 'both. Set them yourself:\n'
-      printf '  git config --global user.name "Your Name"\n'
-      printf '  git config --global user.email "you@example.com"\n'
-      printf 'Or leave them — log in above, run this script again with a project, and\n'
-      printf 'it asks GitHub and offers you both answers.\n'
-    fi
+    # It asks nothing and names no command: whether this machine holds a login is
+    # doctor's to read, and the line below sends them there for it. That is the
+    # whole difference from the block that used to stand here.
+    printf '\nIf that repository is private, log in to GitHub before cloning it. An\n'
+    printf 'unauthenticated request for a private repository comes back 404 rather\n'
+    printf 'than a refusal, so the clone fails while naming the wrong problem.\n'
   fi
 
   # The one step a script cannot take for anybody (docs/adr/0013 decision 5).
@@ -1248,7 +1239,11 @@ Codex is not part of this script. Install it and it asks for a login of its
 own: a ChatGPT Plus, Pro, Business, Edu or Enterprise account, or an OpenAI
 API key.
 
-prep doctor says what this machine is still missing, at any time.
+prep doctor reports what this machine still owes you, at any time: the tools
+that are missing, and the things only you can close — the GitHub login, the
+git name and email every commit needs, and a login for each agent CLI
+installed here. Hand it a project path and it reports what that project owes
+as well.
 MESSAGE
 }
 
