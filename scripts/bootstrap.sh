@@ -200,6 +200,29 @@ have() {
   [ -n "$path" ]
 }
 
+# Put a directory this script installs into on PATH, if what belongs there is
+# already on the disk.
+#
+# A tool an earlier run installed is on the disk, and a shell that started
+# before that run carries none of the directories that run wrote into its rc
+# files. So asking PATH first answers "no" about a machine that already holds
+# the tool, and the step installs it over itself — which for bun means its own
+# installer appending to a rc file again, every run, forever. The disk is read
+# first instead, which is the shape step 1 takes for Homebrew.
+#
+#   $1 the directory
+#   $2 the command that lives in it once it is installed
+put_installed_on_path() {
+  local dir="$1" cmd="$2"
+
+  [ -x "$dir/$cmd" ] || return 0
+
+  case ":$PATH:" in
+    *":$dir:"*) ;;
+    *) export PATH="$dir:$PATH" ;;
+  esac
+}
+
 # The one-liner pipes this script into bash, so stdin carries the script's own
 # text and not a person. A question has to go to the terminal itself, which is
 # what /dev/tty is. Opening it is the test: the file exists in a container and
@@ -915,16 +938,22 @@ git --version
 
 step "3/10 bun"
 
+export BUN_INSTALL
+
+# The installer writes a shell rc, which only the next shell reads, so this run
+# amends PATH itself — before the question as well as after it, because a
+# machine that already holds bun and a terminal that has not heard about it are
+# the same machine.
+put_installed_on_path "$BUN_INSTALL/bin" bun
+
 if have bun; then
   echo "bun is already here."
 else
   curl -fsSL https://bun.sh/install | bash
-fi
 
-# The installer writes a shell rc, which only the next shell reads. This run
-# needs bun now, so PATH is amended here as well.
-export BUN_INSTALL
-export PATH="$BUN_INSTALL/bin:$PATH"
+  # It landed a moment ago, so this shell has still never read a rc naming it.
+  put_installed_on_path "$BUN_INSTALL/bin" bun
+fi
 
 # bun's installer writes a rc of its own, and this writes one as well. It is not
 # a duplicate of it in any way that costs: bun writes `$BUN_INSTALL/bin`, this
@@ -1017,16 +1046,25 @@ GH_BIN="$(command -v gh)"
 
 step "6/10 Claude Code"
 
+# Step 4 exported ~/.local/bin already, which would be enough for the question
+# below to see a claude an earlier run installed — enough, and resting on the
+# order of two steps rather than on anything this one checked. This step reads
+# the disk itself, and goes on being right whatever moves.
+put_installed_on_path "$HOME/.local/bin" claude
+
 if have claude; then
   echo "Claude Code is already here."
 else
   curl -fsSL "$CLAUDE_INSTALL_URL" | bash
+
+  # The installer put it in ~/.local/bin, which this shell may have started
+  # without.
+  put_installed_on_path "$HOME/.local/bin" claude
 fi
 
-# The native installer puts the binary in ~/.local/bin, which plenty of shells
-# do not carry on PATH. Step 4 already exported it, which is what makes step 10
-# able to find claude in this same run; the rc file the installer edits covers
-# the shells that come after (docs/adr/0013).
+# ~/.local/bin is on PATH for the rest of this run either way, which is what
+# makes step 10 able to find claude; the rc file the installer edits covers the
+# shells that come after (docs/adr/0013).
 have claude ||
   fail "Claude Code is installed but claude is not on PATH. Expected it in $HOME/.local/bin"
 

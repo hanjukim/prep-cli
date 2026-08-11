@@ -174,6 +174,12 @@ not carry — `~/.local/bin`, `~/.bun/bin`, `/opt/homebrew/bin`. The script expo
 each directory as it goes and confirms the binary by name before moving on, so a
 link that installed and cannot be found stops the run there (docs/adr/0013).
 
+Each step reads the disk before it asks PATH, because a terminal that started
+before the last run carries none of the directories that run wrote down. Asked
+the other way round, a machine that already holds the tool answers no and the
+step installs it over itself — Homebrew over Homebrew, and bun over bun with
+bun's own installer appending to a rc file again every time.
+
 Exporting covers this run only. The two tarballs edit no rc at all, and the
 installers that do — bun's and Claude Code's — edit one when they can identify
 the shell, which is another vendor's judgement about this machine. So the script
