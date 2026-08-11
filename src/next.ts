@@ -13,7 +13,7 @@ import type {
  * What to run after setup has had its say.
  *
  * The report already tells a person what happened. This tells them what to do
- * with it, in the same intervention level doctor holds to: a verified command,
+ * with it, in the same intervention level chef holds to: a verified command,
  * shown, never run (docs/adr/0002). prep executes none of these.
  *
  * Each project-side step is here because something in the outcome asked for
@@ -45,7 +45,7 @@ function owed(handoff: readonly HandoffResult[]): boolean {
 }
 
 /** The machine check, which is also where a missing harness is offered and installed. */
-const DOCTOR = "prep doctor";
+const CHEF = "prep chef";
 
 /**
  * What to run to get the guidance written, read off the run's own harness rows.
@@ -62,20 +62,20 @@ const DOCTOR = "prep doctor";
  * instruction to run both.
  *
  * With none installed there is nothing to paste, so the step becomes getting a
- * harness — which is doctor's scope, and doctor names what closes the gap
+ * harness — which is chef's scope, and chef names what closes the gap
  * without closing it (docs/adr/0010).
  */
 function harnessStep(present: readonly HarnessPresence[]): NextStep {
   const installed = new Set(present.filter((row) => row.installed).map((row) => row.id));
 
   // Registry order, not outcome order: the table decides which harness is named
-  // first, the same as it decides the order doctor reports them in.
+  // first, the same as it decides the order chef reports them in.
   const [first, second] = harnesses()
     .filter((spec) => installed.has(spec.id))
     .map((spec) => spec.handoffCommand);
 
   if (first === undefined) {
-    return { id: "install-harness", command: DOCTOR, alternative: null };
+    return { id: "install-harness", command: CHEF, alternative: null };
   }
 
   return { id: "harness", command: first, alternative: second ?? null };
@@ -105,12 +105,12 @@ export function nextSteps(outcome: SetupOutcome): NextStep[] {
 
   if (owed(outcome.handoff)) steps.push(harnessStep(outcome.harnesses));
 
-  // A run already sent to doctor for a harness is not sent there twice. The
+  // A run already sent to chef for a harness is not sent there twice. The
   // second line would carry a different reason for the same command, and a
   // footer that repeats itself stops being read.
-  const sent = steps.some((step) => step.command === DOCTOR);
+  const sent = steps.some((step) => step.command === CHEF);
   if (!sent) {
-    steps.push({ id: "doctor", command: DOCTOR, alternative: null });
+    steps.push({ id: "chef", command: CHEF, alternative: null });
   }
 
   return steps;

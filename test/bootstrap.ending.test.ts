@@ -131,10 +131,10 @@ describe("a run that set the project up", () => {
     expect(block.indexOf("/.local/share/prep/env.sh")).toBeLessThan(block.indexOf("cd /home"));
   });
 
-  test("keeps the logins and the doctor command as reference", () => {
+  test("keeps the logins and the chef command as reference", () => {
     expect(reference(ending)).toInclude(note());
     expect(reference(ending)).toInclude("Codex");
-    expect(reference(ending)).toInclude("prep doctor");
+    expect(reference(ending)).toInclude("prep chef");
   });
 
   test("says nothing about the machine-only path", () => {
@@ -175,11 +175,11 @@ describe("a run that stopped at the machine", () => {
     );
   });
 
-  test("points at prep doctor instead, once, and says what it will report", () => {
+  test("points at prep chef instead, once, and says what it will report", () => {
     // The pointer itself, not every mention of the command: the failed-links
-    // list names `prep doctor` too, for a different reason and only when it has
+    // list names `prep chef` too, for a different reason and only when it has
     // something in it.
-    const pointer = /prep doctor reports what this machine still owes you/g;
+    const pointer = /prep chef reports what this machine still owes you/g;
     expect(reference(ending).match(pointer)).toHaveLength(1);
     expect(reference(ending)).toInclude("GitHub login");
     expect(reference(ending)).toInclude("git name and email");

@@ -1,7 +1,7 @@
 import type { CheckResult, Row, ToolSpec } from "./types.ts";
 
 /**
- * What the report reads off a doctor run.
+ * What the report reads off a chef run.
  *
  * Two answers: which entry is which, and whether a missing package manager has
  * made every install command untrustworthy. Both are selections over the

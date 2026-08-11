@@ -4,12 +4,12 @@ import { INDENT, join, pad, widest } from "./layout.ts";
 /**
  * The handoff rows, shared by the two reports that print them.
  *
- * `checkHandoff` is one reader, so setup and doctor cannot disagree about what an
+ * `checkHandoff` is one reader, so setup and chef cannot disagree about what an
  * item's status is (docs/adr/0027). These rows are what keeps them from
  * disagreeing about the wording either — one sentence per item, in one place.
  *
  * What is not here is the framing around them. setup says what it has just
- * written and what is still owed; doctor says what this project owes. Both are
+ * written and what is still owed; chef says what this project owes. Both are
  * honest, they differ, and each report keeps its own.
  */
 

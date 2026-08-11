@@ -265,7 +265,7 @@ function conflicts(lines: string[], plan: MergePlan): void {
  * unrelated, and a run that wrote nothing is exactly when a person most needs
  * to be told what is left.
  *
- * The rows are shared with doctor, which reads the same check. What is setup's
+ * The rows are shared with chef, which reads the same check. What is setup's
  * own is the sentence under them — this run has just written files, so it can
  * say what is left beside what it did (docs/adr/0027).
  */
@@ -293,13 +293,13 @@ const NEXT: Record<NextStepId, string> = {
   approve: "in a terminal — see the merge and answer it",
   harness: "writes the guidance prep does not",
   "install-harness": "no agent CLI here — install one first, then come back",
-  doctor: "reports what this machine still owes you",
+  chef: "reports what this machine still owes you",
 };
 
 /**
  * What to run next.
  *
- * Commands, shown and never run — the same level of intervention doctor holds
+ * Commands, shown and never run — the same level of intervention chef holds
  * to. The block is left out entirely when the run left nothing to do, so its
  * presence means something rather than being furniture.
  *

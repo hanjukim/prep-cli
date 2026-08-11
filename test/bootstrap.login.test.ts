@@ -106,8 +106,8 @@ describe("the machine's standing state is not the ending's to read", () => {
     expect(ending).not.toInclude("git config --global");
   });
 
-  test("it points at prep doctor for both instead", () => {
-    expect(ending).toInclude("prep doctor reports what this machine still owes you");
+  test("it points at prep chef for both instead", () => {
+    expect(ending).toInclude("prep chef reports what this machine still owes you");
   });
 
   test("the project step keeps both, because there they are about this run", () => {

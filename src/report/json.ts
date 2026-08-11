@@ -1,6 +1,6 @@
 import type {
   CheckResult,
-  DoctorProject,
+  ChefProject,
   Guidance,
   HandoffResult,
   PassResult,
@@ -23,9 +23,9 @@ export type JsonReportInput = {
   pass?: readonly PassResult[];
   /**
    * The project this run was given, and what its harness side owes. Absent when
-   * doctor was given no path.
+   * chef was given no path.
    */
-  project?: DoctorProject;
+  project?: ChefProject;
 };
 
 /** The entry shape the contract promises outward. Owned by this module, apart from `CheckResult`. */

@@ -66,13 +66,28 @@ back to the working directory — a run that writes into where you are standing 
 the run people mean.
 _Avoid_: promote, apply
 
-**doctor** (subcommand):
-`prep doctor [path]`. The subcommand that reads and reports and changes nothing.
-The question it answers is **what is wrong**, and the two subcommands divide on
-that — on purpose, not on scope: doctor diagnoses, setup writes
-(docs/adr/0027). It reports the machine's **gaps** and its **pass** items on
-every run. Given a path it reports that project too: the project-scope pass
-items, and the **handoff** the project is still owed.
+**chef** (subcommand):
+`prep chef [path]`. The subcommand that reads and reports and changes nothing.
+The question it answers is **what is missing**, and the two subcommands divide on
+that — on purpose, not on scope: chef reads, setup writes (docs/adr/0027). It
+reports the machine's **gaps** and its **pass** items on every run. Given a path
+it reports that project too: the project-scope pass items, and the **handoff**
+the project is still owed.
+
+**The name is the kitchen's, and so is the register around it.** `prep` is prep
+work, the mise somebody does before service, and **pass** is the shelf a finished
+plate goes on for someone else to pick up — which is what makes that entry
+readable at all. A chef is the person who knows the whole kitchen and can say
+what is missing before service, which is this subcommand's job (docs/adr/0029).
+
+It was called `doctor` until then. That name said somebody visits a sick machine
+and says what is wrong, and it stopped describing the job once the subcommand
+read a project it was handed, held the **handoff**, and counted what was still on
+the pass. **Records written before the rename keep saying `doctor`** — a record is
+not edited into agreement with a later one (`CONTRIBUTING.md`), and three carry
+the old name in their file name. Read them as this entry, and expect no `doctor`
+in anything that runs: the old spelling was removed rather than kept working, so
+`prep doctor` is refused like any other unknown word.
 
 **It never guesses which project it is in.** With no argument it reads the
 machine and nothing else. A path is a person naming the project, and detection
@@ -82,7 +97,7 @@ git for dotfiles, so any rule strong enough to recognise an empty directory
 recognises the home directory as well. It also keeps the bootstrap script's own
 call whole: that call names no path, so the answer it gets is the machine, byte
 for byte what it was (docs/adr/0009).
-_Avoid_: check, audit, lint
+_Avoid_: doctor, check, audit, lint
 
 **artifact**:
 One file a setup run produces. A single run produces several —
@@ -234,7 +249,7 @@ write-and-merge path: on an existing file it shows up in the diff and is
 approved (docs/adr/0003). An entry is written only where both layers are there.
 An entry switching on a plugin whose executable is absent leaves a file that
 reads as equipped while nothing loads. The executable is looked up through the
-same `which` boundary doctor probes with, and where it is absent the install
+same `which` boundary chef probes with, and where it is absent the install
 command is shown — shown, and run by a person. The recommendation section
 disappears only when both layers have been answered.
 _Avoid_: auto-install, extension
@@ -250,7 +265,7 @@ judges each one, and names it.
 system in, three statuses out — so both subcommands call the same function and
 neither report can be wrong about a status while the other is right. What differs
 is the sentence around the rows: setup says what it has just written and what is
-still owed, doctor says what this project owes (docs/adr/0027). doctor reports
+still owed, chef says what this project owes (docs/adr/0027). chef reports
 them only for a project it was given a path to.
 
 There is one exception. With no guidance file at all, prep writes `AGENTS.md` as
@@ -275,13 +290,13 @@ A command worth running once the report is over, read off what the run did. Four
 of them: **approve**, where a merge was planned and nobody was there to approve
 it; **harness**, where the handoff is still owed and a harness is here to be
 asked; **install-harness**, where the same is owed and nothing on this machine
-can be asked; **doctor**, the machine as the next scope out. Each is the level
-of intervention doctor holds to — a verified command, shown, run by a person.
+can be asked; **chef**, the machine as the next scope out. Each is the level
+of intervention chef holds to — a verified command, shown, run by a person.
 prep runs none of them.
 
 The order is fixed: what this run started and left unfinished comes first, and
 the wider scope comes last. `approve` is `prep setup <path>`, at a terminal this
-time. `doctor` closes every run that reaches the end, a dry run included: what
+time. `chef` closes every run that reaches the end, a dry run included: what
 the machine still owes a person does not depend on whether this run wrote a
 file, and a dry run is exactly the run somebody uses to look before touching
 anything.
@@ -292,30 +307,30 @@ holds — a line that starts a binary nobody has does not run when pasted. With
 both installed it names the first and keeps the second as an alternative on the
 same line: which harness somebody works in is not prep's to decide, and two
 commands printed as two lines read as an instruction to run both. With none
-installed the step becomes `prep doctor`, which is where a missing harness is
-named (→ entry point), and the doctor step is then not appended a second time —
+installed the step becomes `prep chef`, which is where a missing harness is
+named (→ entry point), and the chef step is then not appended a second time —
 the same command carrying two different reasons is the shape this section exists
 to avoid.
 
 Reading the machine settles which command to print and nothing else. Whichever
 harness is installed, the exit code is unchanged: it comes from the artifact
 list alone. The project-side steps appear only when the outcome asked for them,
-so their presence means something — the doctor step alone is unconditional, and
-it is never printed twice: a run sent to `prep doctor` for a missing harness is
+so their presence means something — the chef step alone is unconditional, and
+it is never printed twice: a run sent to `prep chef` for a missing harness is
 not sent there again under a second reason. After an approval the steps are
 computed again, since a merge that has just been approved is nothing to go back
 and approve.
 _Avoid_: guidance, hint, suggestion
 
 **check result**:
-What doctor read about one registry entry: its id, its status, the binary
+What chef read about one registry entry: its id, its status, the binary
 actually looked up, where that binary was found, the name this platform's
 package ships that binary under where it is not the same one, and the
 guidance that goes with it. The status is one of three — **installed**, **missing**, or **unsupported** —
 and the last one means this platform has no entry for the tool, so the question
 does not apply here rather than the answer being no. It is a read and nothing
 else: PATH is walked with `which` and no subprocess is started (docs/adr/0010).
-The only processes anywhere in doctor are the fixed read-only questions the
+The only processes anywhere in chef are the fixed read-only questions the
 **pass** items ask (docs/adr/0026).
 
 **gap**:
@@ -324,13 +339,13 @@ unsupported entry is not a gap: another OS's package manager is not this
 machine's concern. A missing prerequisite is the gap that invalidates the
 others' advice, since every install command below it runs through the package
 manager that is not there; the report keeps those gap lines and takes their
-commands back. Any gap at all makes doctor exit 1, which is an observation and
+commands back. Any gap at all makes chef exit 1, which is an observation and
 not a failure — a tool error is 2. What separates a gap from a **pass** item is
 who may close it: the bootstrap script closes a gap by running its command, and
 a pass item is closed by the person or not at all.
 
 **pass**:
-What doctor reads as absent but must not close: a GitHub login, a git identity,
+What chef reads as absent but must not close: a GitHub login, a git identity,
 a login per installed harness, and a directory that is not a git repository.
 prep's own name comes from a kitchen, and this is the first term to lean on that
 register — the pass is the shelf a finished plate waits on for someone else to
@@ -358,11 +373,11 @@ own table.
 
 **Project rows** are answered by whether one path inside the project is there,
 read through the same file system setup writes through. They start nothing, so
-the whitelist of what doctor may run is unchanged, and they are never unknown —
+the whitelist of what chef may run is unchanged, and they are never unknown —
 a path does not time out. There is one: `.git`, which a worktree and a submodule
 carry as a file rather than a directory, so presence is the question and not what
 kind of entry it is. A project row is asked only where there is a project, which
-means only where doctor was handed a path.
+means only where chef was handed a path.
 
 **One table, in the order somebody walks it.** Both scopes sit in one registry
 table and one report section, because an empty project alternates between them

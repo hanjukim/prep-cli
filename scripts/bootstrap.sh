@@ -19,7 +19,7 @@
 # itself — and then, on the way to the project alone, a GitHub login and a git
 # identity. prep cannot build the world that precedes it, so this script takes
 # that place. It opens the chain, then hands
-# the rest back to prep — `prep doctor --json` names a command for every gap that
+# the rest back to prep — `prep chef --json` names a command for every gap that
 # is left and this script runs it. The tool list lives in the registry and never
 # here (docs/adr/0009 decision 3).
 #
@@ -28,7 +28,7 @@
 #
 #   - Claude Code is a link rather than a gap, because without a harness there
 #     is nobody to read the permission files `prep setup` writes
-#     (docs/adr/0013). Codex is not in the chain — doctor names it and a person
+#     (docs/adr/0013). Codex is not in the chain — chef names it and a person
 #     installs it.
 #   - Node is a link, because the vendor's installer lays down a `claude` that
 #     will not start without one and never mentions it.
@@ -315,7 +315,7 @@ install_tarball() {
 # split every step here holds to (docs/adr/0009).
 #
 # stdin carries one pair per line, the canonical name and the shipped name
-# separated by a tab, which is what scripts/links.ts reads out of a doctor
+# separated by a tab, which is what scripts/links.ts reads out of a chef
 # report. Nothing to link is an empty stdin and this loop does not run, which is
 # every macOS run.
 link_renamed() {
@@ -703,7 +703,7 @@ $(claude_login_note)"
 # knows both answers — so this offers them and the person presses Enter twice. A
 # project hosted outside github.com reaches it with no login, and it asks
 # outright. A run that names no project never reaches it at all, and reads about
-# the identity from `prep doctor` rather than from this script's ending, which
+# the identity from `prep chef` rather than from this script's ending, which
 # stopped deciding it (docs/adr/0021, docs/adr/0027).
 ensure_git_identity() {
   local git_name git_email suggested_name suggested_email gh_id gh_login gh_user
@@ -843,7 +843,7 @@ if [ "$PLATFORM" = "macos" ]; then
 else
   # apt is already the system here, so there is nothing to install before it.
   have apt-get ||
-    fail "No apt-get, so this is not a Debian-family system. Install git, bun, Node, gh and Claude Code with your own package manager, then run: prep doctor"
+    fail "No apt-get, so this is not a Debian-family system. Install git, bun, Node, gh and Claude Code with your own package manager, then run: prep chef"
 
   # unzip and curl are what the bun and Claude Code installers download through;
   # a minimal image carries neither. xz-utils is what tar needs to open the Node
@@ -1053,11 +1053,11 @@ have prep || fail "prep is linked but not on PATH. Expected it in $BUN_INSTALL/b
 
 step "8/10 remaining gaps"
 
-# doctor exits 1 when it finds gaps, which is the ordinary case in a bootstrap.
+# chef exits 1 when it finds gaps, which is the ordinary case in a bootstrap.
 # The exit code is dropped and the report is what gets read.
-report="$(prep doctor --json || true)"
+report="$(prep chef --json || true)"
 [ -n "$report" ] ||
-  fail "prep doctor printed nothing. Run it yourself to see why: prep doctor"
+  fail "prep chef printed nothing. Run it yourself to see why: prep chef"
 
 commands="$(printf '%s' "$report" | bun run "$PREP_DIR/scripts/gaps.ts")"
 
@@ -1091,7 +1091,7 @@ fi
 # It runs after the installs and off the report taken before them, because the
 # two names are a fact about the platform and not about this machine — what the
 # installs change is whether the shipped name resolves, and that is asked inside
-# the loop. So there is no second doctor run here.
+# the loop. So there is no second chef run here.
 #
 # The reader runs in its own command and the loop in this shell, rather than the
 # two joined by a pipe: a pipe puts the loop in a subshell, and every failed link
@@ -1236,7 +1236,7 @@ closing_message() {
 
   if [ -n "$FAILED_LINKS" ]; then
     printf '\nThese tools are installed under another name, and this run could not\n'
-    printf 'give them their own. `prep doctor` reports them as missing until it can:\n'
+    printf 'give them their own. `prep chef` reports them as missing until it can:\n'
     printf '%s' "$FAILED_LINKS"
   fi
 
@@ -1244,7 +1244,7 @@ closing_message() {
   # behind its own check — `gh auth status` and `git config --get`. Both are gone
   # (docs/adr/0027). They are the machine's standing state rather than anything
   # this run did, and prep reads them now: they are two of its **pass** items,
-  # which the doctor line below points at. The script decided them in its own
+  # which the chef line below points at. The script decided them in its own
   # shell while prep knew nothing about accounts, and once prep knows, the same
   # knowledge in two places is two places free to drift. **prep decides and the
   # script executes.**
@@ -1259,7 +1259,7 @@ closing_message() {
     # problem, and this is the one place somebody reads that before hitting it.
     #
     # It asks nothing and names no command: whether this machine holds a login is
-    # doctor's to read, and the line below sends them there for it. That is the
+    # chef's to read, and the line below sends them there for it. That is the
     # whole difference from the block that used to stand here.
     printf '\nIf that repository is private, log in to GitHub before cloning it. An\n'
     printf 'unauthenticated request for a private repository comes back 404 rather\n'
@@ -1279,7 +1279,7 @@ Codex is not part of this script. Install it and it asks for a login of its
 own: a ChatGPT Plus, Pro, Business, Edu or Enterprise account, or an OpenAI
 API key.
 
-prep doctor reports what this machine still owes you, at any time: the tools
+prep chef reports what this machine still owes you, at any time: the tools
 that are missing, and the things only you can close — the GitHub login, the
 git name and email every commit needs, and a login for each agent CLI
 installed here. Hand it a project path and it reports what that project owes

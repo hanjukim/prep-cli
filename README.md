@@ -7,7 +7,7 @@ language needs.
 
 prep does two things and nothing else.
 
-- **`prep doctor`** reads this machine and reports what is wrong — the package
+- **`prep chef`** reads this machine and reports what is missing — the package
   manager, the standard tools, the agent CLIs — with the command or the document
   that closes each gap, and the accounts only you can settle. Hand it a path and
   it reports on that project as well. It never guesses which project you are in.
@@ -33,7 +33,7 @@ curl -fsSL https://raw.githubusercontent.com/hanjukim/prep-cli/main/scripts/boot
 ```
 
 Nothing goes after that line. The script opens the chain, closes what
-`prep doctor --json` reports, and then asks for the repository you came to work
+`prep chef --json` reports, and then asks for the repository you came to work
 in — the one thing it cannot work out for itself. It clones what you name and
 runs `prep setup` in it. Press Enter instead and the run stops at a machine that
 is ready, and names the two commands that get the project when you have one.
@@ -49,13 +49,13 @@ On a machine that already has bun, prep runs straight from a clone:
 ```sh
 bun install
 bun link          # puts `prep` on PATH
-prep doctor
+prep chef
 ```
 
 ## Usage
 
 ```
-prep doctor [path] [--json]
+prep chef [path] [--json]
 prep setup [path] [--dry-run] [--json]
 ```
 
@@ -64,9 +64,14 @@ prep setup [path] [--dry-run] [--json]
 
 The path is optional on both, and the two treat its absence differently. `setup`
 falls back to the working directory, because writing into where you are standing
-is the run people mean. `doctor` reads the machine alone, because a directory
+is the run people mean. `chef` reads the machine alone, because a directory
 that looks like a project is a guess and a wrong guess reports on somebody's home
 directory.
+
+`chef` was called `doctor`, and the old spelling is not accepted — there is one
+name per thing here. The register is a kitchen's, which is what makes the report's
+own vocabulary read: prep is the work before service, and the **pass** is the
+shelf a finished plate waits on (`CONTEXT.md`, `docs/adr/0029`).
 
 Exit codes are read off what the run did, and an observation is kept apart from
 a failure:
@@ -74,7 +79,7 @@ a failure:
 | Code | Meaning |
 | --- | --- |
 | 0 | done — gaps none, or at least one file written, or a dry run that produced a plan |
-| 1 | `doctor` found gaps, or `setup` wrote nothing |
+| 1 | `chef` found gaps, or `setup` wrote nothing |
 | 2 | tool error |
 
 ## What a setup run writes

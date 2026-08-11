@@ -24,7 +24,7 @@ const HOME = "/home";
 const RECORD = "/home/.claude/plugins/installed_plugins.json";
 
 function run(argv: readonly string[], deps: RunDeps = {}): Promise<RunResult> {
-  // The check fake answers yes to everything, so doctor's pass half is a
+  // The check fake answers yes to everything, so chef's pass half is a
   // constant here and no test starts a real process.
   return runCli(argv, { home: HOME, which: SERVERS_FOUND, check: () => true, ...deps });
 }
@@ -141,7 +141,7 @@ const ALL_PRESENT_LINUX = { apt: "/usr/bin/apt", ...STANDARD_LINUX, ...HARNESSES
 
 describe("exit codes", () => {
   test("no gaps is 0", async () => {
-    const result = await run(["doctor"], {
+    const result = await run(["chef"], {
       platformName: "darwin",
       which: fakeWhich(ALL_PRESENT_DARWIN),
     });
@@ -150,7 +150,7 @@ describe("exit codes", () => {
   });
 
   test("gaps found is 1", async () => {
-    const result = await run(["doctor"], {
+    const result = await run(["chef"], {
       platformName: "darwin",
       which: fakeWhich({ brew: "/opt/homebrew/bin/brew" }),
     });
@@ -158,7 +158,7 @@ describe("exit codes", () => {
   });
 
   test("a missing prerequisite alone is 1", async () => {
-    const result = await run(["doctor"], {
+    const result = await run(["chef"], {
       platformName: "darwin",
       which: fakeWhich({ ...STANDARD_DARWIN, ...HARNESSES }),
     });
@@ -166,7 +166,7 @@ describe("exit codes", () => {
   });
 
   test("an unsupported OS is 2", async () => {
-    const result = await run(["doctor"], { platformName: "win32", which: fakeWhich({}) });
+    const result = await run(["chef"], { platformName: "win32", which: fakeWhich({}) });
     expect(result.exitCode).toBe(2);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("WSL");
@@ -181,19 +181,19 @@ describe("exit codes", () => {
   test("no subcommand gives 2 and the usage text", async () => {
     const result = await run([], { platformName: "darwin", which: fakeWhich({}) });
     expect(result.exitCode).toBe(2);
-    expect(result.stderr).toContain("prep doctor");
+    expect(result.stderr).toContain("prep chef");
   });
 
   test("--help is 0", async () => {
     const result = await run(["--help"], { platformName: "darwin", which: fakeWhich({}) });
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("prep doctor");
+    expect(result.stdout).toContain("prep chef");
   });
 });
 
 describe("per-platform guidance", () => {
   test("macOS shows brew commands", async () => {
-    const result = await run(["doctor"], {
+    const result = await run(["chef"], {
       platformName: "darwin",
       which: fakeWhich({ brew: "/opt/homebrew/bin/brew", git: "/usr/bin/git" }),
     });
@@ -202,7 +202,7 @@ describe("per-platform guidance", () => {
   });
 
   test("Linux shows apt commands", async () => {
-    const result = await run(["doctor"], {
+    const result = await run(["chef"], {
       platformName: "linux",
       which: fakeWhich({ apt: "/usr/bin/apt", git: "/usr/bin/git" }),
     });
@@ -211,7 +211,7 @@ describe("per-platform guidance", () => {
   });
 
   test("on Linux, fdfind alone does not count fd as installed", async () => {
-    const result = await run(["doctor"], {
+    const result = await run(["chef"], {
       platformName: "linux",
       which: fakeWhich({ apt: "/usr/bin/apt", fdfind: "/usr/bin/fdfind" }),
     });
@@ -220,7 +220,7 @@ describe("per-platform guidance", () => {
   });
 
   test("on Linux, fd on PATH is the whole of what fd needs", async () => {
-    const result = await run(["doctor"], {
+    const result = await run(["chef"], {
       platformName: "linux",
       which: fakeWhich({ apt: "/usr/bin/apt", fd: "/home/me/.local/bin/fd" }),
     });
@@ -229,7 +229,7 @@ describe("per-platform guidance", () => {
   });
 
   test("on macOS, fdfind does not fill fd", async () => {
-    const result = await run(["doctor"], {
+    const result = await run(["chef"], {
       platformName: "darwin",
       which: fakeWhich({ brew: "/opt/homebrew/bin/brew", fdfind: "/usr/bin/fdfind" }),
     });
@@ -240,14 +240,14 @@ describe("per-platform guidance", () => {
 describe("idempotence", () => {
   test("same input gives same output and same exit code", async () => {
     const deps = { platformName: "linux", which: fakeWhich(ALL_PRESENT_LINUX) };
-    const first = await run(["doctor"], deps);
-    const second = await run(["doctor"], deps);
+    const first = await run(["chef"], deps);
+    const second = await run(["chef"], deps);
     expect(second).toEqual(first);
   });
 });
 
 /** A prompt that answers every question the same way and records what it was asked. */
-function doctorPrompt(answer: boolean) {
+function chefPrompt(answer: boolean) {
   const asked: string[] = [];
   const prompt: SetupPrompt = {
     show: () => {},
@@ -260,12 +260,12 @@ function doctorPrompt(answer: boolean) {
   return { prompt, asked };
 }
 
-describe("doctor changes nothing", () => {
+describe("chef changes nothing", () => {
   const HALF_DARWIN = { brew: "/opt/homebrew/bin/brew", ...STANDARD_DARWIN };
 
   test("a terminal on the other end is asked nothing", async () => {
-    const { prompt, asked } = doctorPrompt(true);
-    const result = await run(["doctor"], {
+    const { prompt, asked } = chefPrompt(true);
+    const result = await run(["chef"], {
       platformName: "darwin",
       which: fakeWhich(HALF_DARWIN),
       prompt,
@@ -275,8 +275,8 @@ describe("doctor changes nothing", () => {
   });
 
   test("the report never claims to have closed a gap", async () => {
-    const { prompt } = doctorPrompt(true);
-    const result = await run(["doctor"], {
+    const { prompt } = chefPrompt(true);
+    const result = await run(["chef"], {
       platformName: "darwin",
       which: fakeWhich(HALF_DARWIN),
       prompt,
@@ -287,7 +287,7 @@ describe("doctor changes nothing", () => {
   });
 
   test("a missing harness stays a gap, so the run ends at 1", async () => {
-    const result = await run(["doctor"], {
+    const result = await run(["chef"], {
       platformName: "darwin",
       which: fakeWhich(HALF_DARWIN),
     });
@@ -297,13 +297,13 @@ describe("doctor changes nothing", () => {
 
   test("a terminal run and a piped run report the same thing", async () => {
     const deps = { platformName: "darwin", which: fakeWhich(HALF_DARWIN) };
-    const { prompt } = doctorPrompt(true);
-    expect(await run(["doctor"], { ...deps, prompt })).toEqual(await run(["doctor"], deps));
+    const { prompt } = chefPrompt(true);
+    expect(await run(["chef"], { ...deps, prompt })).toEqual(await run(["chef"], deps));
   });
 
   test("Linux reports the same way, with nothing to approve", async () => {
-    const { prompt, asked } = doctorPrompt(true);
-    const result = await run(["doctor"], {
+    const { prompt, asked } = chefPrompt(true);
+    const result = await run(["chef"], {
       platformName: "linux",
       which: fakeWhich({ apt: "/usr/bin/apt", ...STANDARD_LINUX }),
       prompt,
@@ -318,7 +318,7 @@ describe("the pass items", () => {
   const EQUIPPED = { platformName: "darwin", which: fakeWhich(ALL_PRESENT_DARWIN) };
 
   test("all four are reported when both harnesses are here", async () => {
-    const result = await run(["doctor"], EQUIPPED);
+    const result = await run(["chef"], EQUIPPED);
     for (const name of ["GitHub login", "git identity", "Claude Code login", "Codex login"]) {
       expect(result.stdout).toContain(name);
     }
@@ -327,7 +327,7 @@ describe("the pass items", () => {
   test("a harness that is not installed is not asked about", async () => {
     const { codex, ...withoutCodex } = ALL_PRESENT_DARWIN;
     const asked: string[] = [];
-    const result = await run(["doctor"], {
+    const result = await run(["chef"], {
       platformName: "darwin",
       which: fakeWhich(withoutCodex),
       check: (argv) => {
@@ -340,13 +340,13 @@ describe("the pass items", () => {
   });
 
   test("a missing pass item shows the command that closes it", async () => {
-    const result = await run(["doctor"], { ...EQUIPPED, check: () => false });
+    const result = await run(["chef"], { ...EQUIPPED, check: () => false });
     expect(result.stdout).toContain("gh auth login");
     expect(result.stdout).toContain("git config --global user.name");
   });
 
   test("a check that gives no answer reads unknown and names its own command", async () => {
-    const result = await run(["doctor"], { ...EQUIPPED, check: () => null });
+    const result = await run(["chef"], { ...EQUIPPED, check: () => null });
     expect(result.stdout).toContain("unknown");
     expect(result.stdout).toContain("gh auth status");
     expect(result.stdout).toContain("git config --get user.name");
@@ -354,7 +354,7 @@ describe("the pass items", () => {
 
   test("under --json, a slow check shows no progress even with a terminal watching", async () => {
     const writes: string[] = [];
-    const result = await run(["doctor", "--json"], {
+    const result = await run(["chef", "--json"], {
       ...EQUIPPED,
       check: () => new Promise((resolve) => setTimeout(() => resolve(true), 450)),
       progress: (text) => writes.push(text),
@@ -365,7 +365,7 @@ describe("the pass items", () => {
 
   test("with a terminal watching, a slow check names itself and clears the line", async () => {
     const writes: string[] = [];
-    await run(["doctor"], {
+    await run(["chef"], {
       ...EQUIPPED,
       check: () => new Promise((resolve) => setTimeout(() => resolve(true), 450)),
       progress: (text) => writes.push(text),
@@ -374,7 +374,7 @@ describe("the pass items", () => {
   });
 
   test("the project row is absent until a project is named", async () => {
-    const result = await run(["doctor"], EQUIPPED);
+    const result = await run(["chef"], EQUIPPED);
     expect(result.stdout).not.toContain("git repository");
     expect(result.stdout).toContain("Pass (4)");
   });
@@ -382,15 +382,15 @@ describe("the pass items", () => {
   test("pass items never change the exit code", async () => {
     // Every account missing on a fully equipped machine is still 0: an account
     // nobody has opened is a legitimate state, not a broken machine.
-    expect((await run(["doctor"], { ...EQUIPPED, check: () => false })).exitCode).toBe(0);
-    expect((await run(["doctor"], { ...EQUIPPED, check: () => null })).exitCode).toBe(0);
+    expect((await run(["chef"], { ...EQUIPPED, check: () => false })).exitCode).toBe(0);
+    expect((await run(["chef"], { ...EQUIPPED, check: () => null })).exitCode).toBe(0);
     // And a ready pass buys nothing back: gaps still make it 1.
     const gappy = { platformName: "darwin", which: fakeWhich({ brew: "/opt/homebrew/bin/brew" }) };
-    expect((await run(["doctor"], { ...gappy, check: () => true })).exitCode).toBe(1);
+    expect((await run(["chef"], { ...gappy, check: () => true })).exitCode).toBe(1);
   });
 });
 
-describe("doctor takes a path", () => {
+describe("chef takes a path", () => {
   /** Everything installed and every account settled, so the project half is the only variable. */
   const EQUIPPED = { platformName: "darwin", which: fakeWhich(ALL_PRESENT_DARWIN) };
 
@@ -402,35 +402,35 @@ describe("doctor takes a path", () => {
   };
 
   test("with no path, the report says nothing about any project", async () => {
-    const result = await run(["doctor"], EQUIPPED);
+    const result = await run(["chef"], EQUIPPED);
     expect(result.stdout).not.toContain("Handoff");
-    expect(result.stdout.split("\n")[0]).toBe("prep doctor · darwin");
+    expect(result.stdout.split("\n")[0]).toBe("prep chef · darwin");
   });
 
   test("with a path, the report names the project and what it owes", async () => {
     const { fs } = fakeFs([PROJECT]);
-    const result = await run(["doctor", PROJECT], { ...EQUIPPED, fs });
-    expect(result.stdout.split("\n")[0]).toBe(`prep doctor · darwin · ${PROJECT}`);
+    const result = await run(["chef", PROJECT], { ...EQUIPPED, fs });
+    expect(result.stdout.split("\n")[0]).toBe(`prep chef · darwin · ${PROJECT}`);
     expect(result.stdout).toContain("Handoff (3)");
     expect(result.stdout).toContain("no docs/agents/domain.md");
   });
 
   test("a directory that is no repository is a pass row, with git init beside it", async () => {
     const { fs } = fakeFs([PROJECT]);
-    const result = await run(["doctor", PROJECT], { ...EQUIPPED, fs });
+    const result = await run(["chef", PROJECT], { ...EQUIPPED, fs });
     expect(result.stdout).toMatch(/✗ git repository\s+git init/);
   });
 
   test("a repository closes that row without closing the others", async () => {
     const { fs } = fakeFs([PROJECT, "/project/.git"]);
-    const result = await run(["doctor", PROJECT], { ...EQUIPPED, fs });
+    const result = await run(["chef", PROJECT], { ...EQUIPPED, fs });
     expect(result.stdout).toContain("✓ git repository");
     expect(result.stdout).toContain("Handoff (3)");
   });
 
   test("a project owing nothing still reports its rows, so the section answers the question", async () => {
     const { fs } = fakeFs([PROJECT, "/project/.git"], HANDED_OVER);
-    const result = await run(["doctor", PROJECT], { ...EQUIPPED, fs });
+    const result = await run(["chef", PROJECT], { ...EQUIPPED, fs });
     expect(result.stdout).toContain("✓ language");
     expect(result.stdout).toContain("✓ issue tracker");
     expect(result.stdout).toContain("✓ domain docs");
@@ -440,22 +440,22 @@ describe("doctor takes a path", () => {
     // An empty directory that is no repository and owes all three items: still 0
     // on a machine with no gaps. Being owed something is not a failed run.
     const { fs } = fakeFs([PROJECT]);
-    expect((await run(["doctor", PROJECT], { ...EQUIPPED, fs })).exitCode).toBe(0);
+    expect((await run(["chef", PROJECT], { ...EQUIPPED, fs })).exitCode).toBe(0);
     // And a project that owes nothing buys no gap back.
     const gappy = { platformName: "darwin", which: fakeWhich({ brew: "/opt/homebrew/bin/brew" }) };
     const settled = fakeFs([PROJECT, "/project/.git"], HANDED_OVER);
-    expect((await run(["doctor", PROJECT], { ...gappy, fs: settled.fs })).exitCode).toBe(1);
+    expect((await run(["chef", PROJECT], { ...gappy, fs: settled.fs })).exitCode).toBe(1);
   });
 
-  test("doctor writes nothing, whatever the project is missing", async () => {
+  test("chef writes nothing, whatever the project is missing", async () => {
     const { fs, written } = fakeFs([PROJECT]);
-    await run(["doctor", PROJECT], { ...EQUIPPED, fs });
+    await run(["chef", PROJECT], { ...EQUIPPED, fs });
     expect([...written.keys()]).toEqual([]);
   });
 
   test("a path that is not a directory is a tool error, not an empty project", async () => {
     const { fs } = fakeFs([PROJECT]);
-    const result = await run(["doctor", "/nowhere"], { ...EQUIPPED, fs });
+    const result = await run(["chef", "/nowhere"], { ...EQUIPPED, fs });
     expect(result.exitCode).toBe(2);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("Not a project directory: /nowhere");
@@ -463,21 +463,21 @@ describe("doctor takes a path", () => {
 
   test("a guidance file that cannot be read stops the run rather than reading as absent", async () => {
     const { fs } = fakeFs([PROJECT, GUIDANCE]);
-    const result = await run(["doctor", PROJECT], { ...EQUIPPED, fs });
+    const result = await run(["chef", PROJECT], { ...EQUIPPED, fs });
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain("Could not read AGENTS.md");
   });
 
-  test("two paths are refused — doctor takes one project at most", async () => {
+  test("two paths are refused — chef takes one project at most", async () => {
     const { fs } = fakeFs([PROJECT]);
-    const result = await run(["doctor", PROJECT, "/other"], { ...EQUIPPED, fs });
+    const result = await run(["chef", PROJECT, "/other"], { ...EQUIPPED, fs });
     expect(result.exitCode).toBe(2);
-    expect(result.stderr).toContain("doctor takes one path at most");
+    expect(result.stderr).toContain("chef takes one path at most");
   });
 
-  test("with no path doctor never guesses one, even where setup would fall back to it", async () => {
+  test("with no path chef never guesses one, even where setup would fall back to it", async () => {
     const { fs } = fakeFs([PROJECT]);
-    const result = await run(["doctor"], { ...EQUIPPED, fs, cwd: PROJECT });
+    const result = await run(["chef"], { ...EQUIPPED, fs, cwd: PROJECT });
     expect(result.stdout).not.toContain("Handoff");
     expect(result.stdout).not.toContain("git repository");
   });
@@ -492,20 +492,20 @@ describe("doctor takes a path", () => {
       [home, `${home}/.git`, `${home}/.claude/settings.json`],
       { [`${home}/CLAUDE.md`]: "@AGENTS.md\n" },
     );
-    const result = await run(["doctor"], {
+    const result = await run(["chef"], {
       ...EQUIPPED,
       fs: looksLikeAProject.fs,
       cwd: home,
       home,
     });
-    expect(result.stdout.split("\n")[0]).toBe("prep doctor · darwin");
+    expect(result.stdout.split("\n")[0]).toBe("prep chef · darwin");
     expect(result.stdout).not.toContain("Handoff");
     expect(result.stdout).not.toContain(home);
   });
 
   test("the same project reported twice reads the same both times", async () => {
     const deps = { ...EQUIPPED, fs: fakeFs([PROJECT]).fs };
-    expect(await run(["doctor", PROJECT], deps)).toEqual(await run(["doctor", PROJECT], deps));
+    expect(await run(["chef", PROJECT], deps)).toEqual(await run(["chef", PROJECT], deps));
   });
 });
 
@@ -593,8 +593,8 @@ describe("setup argument parsing", () => {
     expect(result.stderr).toContain("--force");
   });
 
-  test("--dry-run on doctor is refused, since it would do nothing there", async () => {
-    const result = await run(["doctor", "--dry-run"], {
+  test("--dry-run on chef is refused, since it would do nothing there", async () => {
+    const result = await run(["chef", "--dry-run"], {
       platformName: "darwin",
       which: fakeWhich(ALL_PRESENT_DARWIN),
     });

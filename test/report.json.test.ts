@@ -293,7 +293,7 @@ describe("no human wording leaks in", () => {
 
   test("no summary wording and no human header or footer", () => {
     for (const output of outputs) {
-      expect(output).not.toContain("prep doctor ·");
+      expect(output).not.toContain("prep chef ·");
       expect(output).not.toContain("Installed");
       expect(output).not.toContain("Gaps");
       expect(output).not.toContain("Prerequisites");
