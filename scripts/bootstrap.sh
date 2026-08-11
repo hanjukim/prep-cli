@@ -150,6 +150,20 @@ step() {
 # one line to act on rather than a wall of shell output.
 on_error() {
   local code=$?
+
+  # `set -E` carries this trap into subshells, and a subshell returning non-zero
+  # is usually a question being answered rather than a run going wrong: `have`
+  # asks one per tool, in a `$(command -v …)`, and every tool the machine does
+  # not hold answers no. `exit` there ends the subshell alone, so announcing a
+  # stop would be false twice over — a bare Mac announced five and finished.
+  #
+  # The caller sees the code either way. It handles it, as `have` does, or it
+  # fails itself and brings this trap back here, where a run can really be
+  # stopped.
+  if [ "$BASH_SUBSHELL" -ne 0 ]; then
+    exit "$code"
+  fi
+
   printf '\nStopped during: %s\n' "$STEP" >&2
   printf 'The last command exited with %s. Nothing after this step ran.\n' "$code" >&2
   printf 'Fix that and run this script again. It skips whatever is already installed.\n' >&2
