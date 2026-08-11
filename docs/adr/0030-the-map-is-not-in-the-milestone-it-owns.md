@@ -1,7 +1,12 @@
-# ADR-0025: The map is not in the milestone it owns
+# ADR-0030: The map is not in the milestone it owns
 
 **Date:** 2026-08-06
-**Status:** Accepted. It narrows no record before it. The wayfinding
+**Status:** Accepted. It narrows no record before it. **Numbered 0030 rather
+than 0025**, which is the number it was written under: 0025 had been taken by
+"the link that gives a name back belongs to the script" while this record sat on
+its branch, and a citation of `docs/adr/0025` has to resolve to one file. The
+date above is the day the decision was made, which is what the sequence orders
+by — so this record sits after four it predates. The wayfinding
 conventions in `docs/agents/issue-tracker.md` arrived without a record of their
 own, and the milestone's job among them — collecting a map's children so one
 `gh issue list` answers the frontier — is unchanged here. This record only
