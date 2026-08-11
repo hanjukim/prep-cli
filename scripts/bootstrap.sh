@@ -757,6 +757,24 @@ esac
 printf 'Platform: %s (%s)\n' "$PLATFORM" "$(uname -m)"
 
 if [ "$PLATFORM" = "macos" ]; then
+  # Homebrew installs to /opt/homebrew on Apple Silicon and /usr/local on Intel,
+  # and a shell that started before it has neither on PATH until a rc is read
+  # again. So the disk is read before the question is asked: a machine that
+  # holds brew and a terminal that has not heard about it are the same machine,
+  # and asking PATH first installs Homebrew over itself — which is what a run
+  # started from a shell without `path_helper` did.
+  put_brew_on_path() {
+    local candidate
+    for candidate in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+      if [ -x "$candidate" ]; then
+        eval "$("$candidate" shellenv)"
+        break
+      fi
+    done
+  }
+
+  put_brew_on_path
+
   if have brew; then
     echo "Homebrew is already here."
   else
@@ -765,16 +783,10 @@ if [ "$PLATFORM" = "macos" ]; then
     echo "Installing Homebrew. It brings the Command Line Tools, and git with them."
     NONINTERACTIVE=1 /bin/bash -c \
       "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-  fi
 
-  # Homebrew installs to /opt/homebrew on Apple Silicon and /usr/local on Intel,
-  # and a fresh shell has neither on PATH until a shell rc is read again.
-  for candidate in /opt/homebrew/bin/brew /usr/local/bin/brew; do
-    if [ -x "$candidate" ]; then
-      eval "$("$candidate" shellenv)"
-      break
-    fi
-  done
+    # It landed a moment ago, so this shell has still never read a rc naming it.
+    put_brew_on_path
+  fi
 
   have brew || fail "Homebrew is installed but brew is not on PATH. Open a new terminal and try again."
 else
