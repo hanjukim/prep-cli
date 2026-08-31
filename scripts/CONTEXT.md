@@ -37,9 +37,13 @@ has nobody to ask, so it takes the same ending Enter takes — the machine-only
 one, whose next action is a `git clone` neither run needs a terminal for
 (docs/adr/0028). A run that clones ends by printing the two commands that finish
 the job, `cd` into the project and `claude`, because a script cannot move the
-shell that called it. On macOS
-the brew installer pulls in the Command Line Tools, so git arrives with it; on
-Linux apt is already the system, so it starts with `sudo apt install git`. The
+shell that called it. On macOS the brew installer pulls in the Command Line
+Tools, so git arrives with it — and until they arrive `/usr/bin/git` is there
+without git being there, a stub whose job is to ask for the tools when somebody
+runs it. So the step runs git rather than looking it up: looking it up passes on
+a machine where the very next command fails, and the sentence naming what to do
+about it sits in the branch that could not be reached. On Linux apt is already
+the system, so it starts with `sudo apt install git`. The
 script carries no tool list of its own — **prep decides and the script
 executes.** The registry stays the single answer to what a machine should hold,
 and the guidance in `--json` is the contract between the two.
@@ -170,6 +174,19 @@ not carry — `~/.local/bin`, `~/.bun/bin`, `/opt/homebrew/bin`. The script expo
 each directory as it goes and confirms the binary by name before moving on, so a
 link that installed and cannot be found stops the run there (docs/adr/0013).
 
+A step that installs into a directory of its own reads the disk before it asks
+PATH, because a terminal that started before the last run carries none of the
+directories that run wrote down. Asked the other way round, a machine that
+already holds the tool answers no and the step installs it over itself —
+Homebrew over Homebrew, and bun over bun with bun's own installer appending to a
+rc file again every time. Node and gh do not need it: brew is on PATH by then
+and answers for both.
+
+Reading the disk is a question and not a promise. Where a directory has to be on
+PATH whatever answered for the tool, the step says so outright: `bun link` in
+step 7 puts prep in bun's bin directory however bun itself arrived, so step 3
+puts that directory on PATH without asking.
+
 Exporting covers this run only. The two tarballs edit no rc at all, and the
 installers that do — bun's and Claude Code's — edit one when they can identify
 the shell, which is another vendor's judgement about this machine. So the script
@@ -192,14 +209,22 @@ Every file that exists is written to rather than the one `$SHELL` names, because
 one person runs bash in one terminal and zsh in another and this run installed
 the tools for both.
 
-`$SHELL` decides one thing: which file to create where none exists at all. That
-used to be `~/.profile` always, and zsh never reads `~/.profile` — a fresh macOS
-account and anybody who ran `chsh` before writing a rc got a file their own shell
-does not open. So it is `~/.zshrc` for zsh, `config.fish` for fish, `.profile`
-and `.bashrc` together for bash, and `.profile` for anything else. csh and tcsh
+`$SHELL` decides one thing: which file to create where the shell it names reads
+none of them. The question is about that shell rather than about the machine: an
+account with a `.profile` and no `.zshrc` has a rc file, zsh opens none of the
+ones this script writes into, and it gets a `.zshrc` made for it exactly as an
+account with nothing at all would. Where `$SHELL` is unset — a `su`, a cron —
+the password database answers instead, which is `getent` on Linux and `dscl` on
+macOS, a machine that keeps the record in Directory Services and carries no
+`getent` to read it with. What gets created used to be `~/.profile` always, and
+zsh never reads `~/.profile` — a fresh macOS account and anybody who ran `chsh`
+before writing a rc got a file their own shell does not open. So it is
+`~/.zshrc` for zsh, `config.fish` for fish, `.profile` and `.bashrc` together
+for bash, and `.profile` for anything else. csh and tcsh
 get the POSIX line and no branch of their own: they would need a third syntax and
 a fourth set of files, neither platform starts anybody on one, and a guess
-written into a rc is worse than a line somebody adapts (docs/adr/0024).
+written into a rc is worse than a line somebody adapts (docs/adr/0024,
+docs/adr/0029).
 
 **The one terminal no rc file reaches is the one running the script.** It read
 its rc before any of this existed, so a command named for a person to run

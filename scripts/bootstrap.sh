@@ -200,6 +200,39 @@ have() {
   [ -n "$path" ]
 }
 
+# Put a directory on PATH for the rest of this run, once however often it is
+# asked for.
+#
+#   $1 the directory
+put_on_path() {
+  case ":$PATH:" in
+    *":$1:"*) ;;
+    *) export PATH="$1:$PATH" ;;
+  esac
+}
+
+# The same, for a directory whose tool may not be installed yet.
+#
+# A tool an earlier run installed is on the disk, and a shell that started
+# before that run carries none of the directories that run wrote into its rc
+# files. So asking PATH first answers "no" about a machine that already holds
+# the tool, and the step installs it over itself — which for bun means its own
+# installer appending to a rc file again, every run, forever. The disk is read
+# first instead, which is the shape step 1 takes for Homebrew.
+#
+# It is a question, not a promise: a step that needs the directory on PATH
+# whatever answered its command calls `put_on_path` and does not ask.
+#
+#   $1 the directory
+#   $2 the command that lives in it once it is installed
+put_installed_on_path() {
+  local dir="$1" cmd="$2"
+
+  [ -x "$dir/$cmd" ] || return 0
+
+  put_on_path "$dir"
+}
+
 # The one-liner pipes this script into bash, so stdin carries the script's own
 # text and not a person. A question has to go to the terminal itself, which is
 # what /dev/tty is. Opening it is the test: the file exists in a container and
@@ -381,7 +414,17 @@ login_shell() {
   local shell="${SHELL:-}"
 
   if [ -z "$shell" ]; then
-    shell="$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7 || true)"
+    # Two databases, because `getent` is glibc's and macOS does not carry it.
+    # A Mac keeps the record in Directory Services, where `dscl` prints it as
+    # `UserShell: /bin/zsh` — a label and a value, so the value is cut out. A
+    # machine answering neither leaves $shell empty, which the caller reads as
+    # POSIX.
+    if have getent; then
+      shell="$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7 || true)"
+    elif have dscl; then
+      shell="$(dscl . -read "/Users/$(id -un)" UserShell 2>/dev/null |
+        awk '/^UserShell:/ { print $2 }' || true)"
+    fi
   fi
 
   printf '%s' "${shell##*/}"
@@ -401,6 +444,27 @@ rc_candidates() {
     "$HOME/.zshrc" \
     "$HOME/.profile" \
     "$HOME/.config/fish/config.fish"
+}
+
+# The rc files, of the ones this script writes to, that this person's own shell
+# reads.
+#
+# `rc_candidates` is the wider list, and it is wide on purpose: a machine can
+# carry several shells and a PATH line in each costs nothing. This is the
+# narrower question — whether anything was written where this person will meet
+# it. A Mac account with a `.profile` and no `.zshrc` answers the wider question
+# yes and this one no, and zsh reads neither `.profile` nor `.bashrc`.
+#
+# `.zprofile` is missing here for the same reason it is missing there: a shell
+# reads it, but this script does not write to it, so its being present says
+# nothing about where this run's lines went.
+shell_rc_candidates() {
+  case "$(login_shell)" in
+    fish) printf '%s\n' "$HOME/.config/fish/config.fish" ;;
+    zsh) printf '%s\n' "$HOME/.zshrc" ;;
+    bash) printf '%s\n' "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile" ;;
+    *) printf '%s\n' "$HOME/.profile" ;;
+  esac
 }
 
 # The rc a machine with none at all gets, named by the shell that will read it.
@@ -466,11 +530,14 @@ persist_on_path() {
     "$HOME"/*) written_as="\$HOME${dir#"$HOME"}" ;;
   esac
 
-  # Nothing to append to means nobody reads anything, so one is created — the
-  # one this person's shell will actually read.
+  # Nothing this person's shell reads means the lines below land in files that
+  # nothing opens, so one it does read is created first. The question is about
+  # that shell and not about the machine: asking whether *any* rc exists let a
+  # zsh account with a `.profile` take the whole run's PATH into a file zsh
+  # never opens, with `create_default_rc` sitting right there unable to fire.
   while IFS= read -r rc; do
     if [ -f "$rc" ]; then any=1; fi
-  done < <(rc_candidates)
+  done < <(shell_rc_candidates)
 
   [ "$any" -eq 1 ] || create_default_rc
 
@@ -861,6 +928,18 @@ step "2/10 git"
 
 have git ||
   fail "git is still not here after step 1. On macOS run: xcode-select --install"
+
+# A Mac without the Command Line Tools carries /usr/bin/git anyway — a stub that
+# exists to ask for the tools rather than to be git. `command -v` finds it and
+# the check above passes without meaning it, so the tool has to be run before it
+# counts: the stub exits 1 here, and this line is where a half-finished step 1
+# stops instead of somewhere further on with git blamed for it.
+#
+# Its output is dropped because the stub also opens a dialog and prints its own
+# refusal, and the sentence below is the one that says what to do about it.
+git --version >/dev/null 2>&1 ||
+  fail "git is on PATH but does not run. On macOS that is the Command Line Tools stub, which arrives without the tools themselves. Run: xcode-select --install"
+
 git --version
 
 # ---------------------------------------------------------------------------
@@ -869,16 +948,25 @@ git --version
 
 step "3/10 bun"
 
+export BUN_INSTALL
+
+# The installer writes a shell rc, which only the next shell reads, so this run
+# amends PATH itself — before the question as well as after it, because a
+# machine that already holds bun and a terminal that has not heard about it are
+# the same machine.
+put_installed_on_path "$BUN_INSTALL/bin" bun
+
 if have bun; then
   echo "bun is already here."
 else
   curl -fsSL https://bun.sh/install | bash
 fi
 
-# The installer writes a shell rc, which only the next shell reads. This run
-# needs bun now, so PATH is amended here as well.
-export BUN_INSTALL
-export PATH="$BUN_INSTALL/bin:$PATH"
+# Unconditionally this time, and not only where bun came from here. Step 7 runs
+# `bun link`, which puts prep in $BUN_INSTALL/bin whatever answered `bun` — so a
+# machine whose bun arrived through brew needs this directory on PATH too, and
+# without it step 7 fails on a prep it just linked.
+put_on_path "$BUN_INSTALL/bin"
 
 # bun's installer writes a rc of its own, and this writes one as well. It is not
 # a duplicate of it in any way that costs: bun writes `$BUN_INSTALL/bin`, this
@@ -971,16 +1059,21 @@ GH_BIN="$(command -v gh)"
 
 step "6/10 Claude Code"
 
+# Step 4 exported ~/.local/bin already, which would be enough for the question
+# below to see a claude an earlier run installed — enough, and resting on the
+# order of two steps rather than on anything this one checked. This step reads
+# the disk itself, and goes on being right whatever moves.
+put_installed_on_path "$HOME/.local/bin" claude
+
 if have claude; then
   echo "Claude Code is already here."
 else
   curl -fsSL "$CLAUDE_INSTALL_URL" | bash
 fi
 
-# The native installer puts the binary in ~/.local/bin, which plenty of shells
-# do not carry on PATH. Step 4 already exported it, which is what makes step 10
-# able to find claude in this same run; the rc file the installer edits covers
-# the shells that come after (docs/adr/0013).
+# ~/.local/bin is on PATH for the rest of this run either way, which is what
+# makes step 10 able to find claude; the rc file the installer edits covers the
+# shells that come after (docs/adr/0013).
 have claude ||
   fail "Claude Code is installed but claude is not on PATH. Expected it in $HOME/.local/bin"
 
