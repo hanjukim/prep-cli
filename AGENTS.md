@@ -22,7 +22,8 @@ goes when the outer is removed.
 whoever meets it next. Ordinary work — the wording of a message, a line added to
 an ending, a rename — is answered by the commit message and by the `CONTEXT.md`
 entry it changes. A record costs every later reader of `docs/adr/`, so it is
-written for them and not for the run that produced it. See `CONTRIBUTING.md`.
+written for them. Before narrowing or replacing one, read **Where a decision
+goes** in `CONTRIBUTING.md`: the old record's Status line changes with it.
 
 ## Language
 

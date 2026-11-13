@@ -15,10 +15,12 @@ bunx tsc --noEmit           # types
 shellcheck scripts/bootstrap.sh
 ```
 
-CI runs the suite, the type checker and `shellcheck` on every push and every
-pull request, on every branch — three jobs, in `.github/workflows/ci.yml`. Run
-them locally first; a red branch tells you nothing you could not have known a
-minute earlier.
+CI runs the suite, the type checker and `bash -n scripts/bootstrap.sh` on every
+push and every pull request, on every branch — three jobs, in
+`.github/workflows/ci.yml`. Run them locally first; a red branch tells you
+nothing you could not have known a minute earlier. `shellcheck` is a local check
+only: `bash -n` finds what bash cannot parse and nothing else, and the workflow
+says why the wider check is not a job.
 
 ## What the tests reach
 
@@ -55,6 +57,12 @@ Two documents carry the design, and neither is a changelog.
 
 Add a record when a choice would otherwise have to be re-argued from scratch by
 whoever meets it next. Ordinary work does not need one.
+
+**A change that removes a concept owes a search.** When a diff deletes a module,
+a type or a term, search what is left — source comments, `scripts/`, both
+`CONTEXT.md` files — for the deleted names and for the words that described
+them, and put what the search found in the review. A comment that still
+describes the removed thing compiles and passes, so no check will find it.
 
 ## Language
 
