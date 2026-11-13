@@ -7,6 +7,7 @@ import {
   mkdtempSync,
   readFileSync,
   readlinkSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -123,6 +124,36 @@ describe("renderLinks", () => {
   });
 });
 
+/** The shell, resolved once from the machine running the suite. It is started by path, not found on the fake PATH. */
+const BASH = Bun.which("bash") ?? "bash";
+
+/** The only programs `link_renamed` starts. Everything else it does is a shell builtin. */
+const COREUTILS = ["mkdir", "ln"];
+
+/**
+ * The PATH `link_renamed` runs under: this HOME's directories and nothing of the
+ * machine's.
+ *
+ * `/usr/bin` is left off on purpose. A machine that really holds `fdfind` or
+ * `batcat` — which is any Debian machine set up by this script — would answer
+ * `have` for a name the test means to be absent, and the test would then report
+ * on the machine instead of the function. The two programs the function needs
+ * are linked into a directory of their own, so nothing else on the machine can
+ * be found.
+ */
+function isolatedPath(home: string): string {
+  const tools = join(home, "tools");
+  if (!existsSync(tools)) {
+    mkdirSync(tools, { recursive: true });
+    for (const name of COREUTILS) {
+      const real = Bun.which(name);
+      if (real === null) throw new Error(`${name} is not on this machine's PATH`);
+      symlinkSync(real, join(tools, name));
+    }
+  }
+  return `${home}/.local/bin:${home}/usr-bin:${tools}`;
+}
+
 /**
  * Runs `link_renamed` over one HOME of its own, and hands back that HOME.
  *
@@ -150,7 +181,7 @@ function linkInFreshHome(
 
   const result = Bun.spawnSync({
     cmd: [
-      "bash",
+      BASH,
       "-c",
       // What it linked goes to its own stdout and is read off the file system
       // below; what stdout carries here is the list of names it could not give,
@@ -159,7 +190,7 @@ function linkInFreshHome(
       "bash",
       pairs,
     ],
-    env: { HOME: home, PATH: `${home}/.local/bin:${packages}:/usr/bin:/bin` },
+    env: { HOME: home, PATH: isolatedPath(home) },
   });
 
   if (result.exitCode !== 0) {
@@ -206,13 +237,13 @@ describe("link_renamed", () => {
     // The same pair again, over the HOME the first run left behind.
     const again = Bun.spawnSync({
       cmd: [
-        "bash",
+        BASH,
         "-c",
         `set -Eeuo pipefail\nFAILED_LINKS=""\n${LINK_FUNCTIONS}\nlink_renamed <<<"$1"`,
         "bash",
         "bat\tbatcat",
       ],
-      env: { HOME: home, PATH: `${home}/.local/bin:${home}/usr-bin:/usr/bin:/bin` },
+      env: { HOME: home, PATH: isolatedPath(home) },
     });
 
     expect(again.exitCode).toBe(0);
