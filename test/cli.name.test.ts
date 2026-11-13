@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 import { type RunDeps, type RunResult, run as runCli } from "../src/cli.ts";
-import type { SetupFs, SetupPrompt, WhichFn } from "../src/types.ts";
+import type { SetupFs, WhichFn } from "../src/types.ts";
 
 /**
  * The reading subcommand is `chef`, and `doctor` is not a spelling of it.
@@ -51,11 +51,6 @@ function emptyProject(): SetupFs {
   };
 }
 
-/** Somebody who approves whatever is put in front of them, so setup reaches its report. */
-function approvingPrompt(): SetupPrompt {
-  return { show: () => {}, confirm: () => true, choose: () => "existing" };
-}
-
 describe("the subcommand that reads is chef", () => {
   test("chef runs, and reports the machine", async () => {
     const result = await run(["chef"], BARE);
@@ -101,7 +96,6 @@ describe("the name a machine reads", () => {
       ...BARE,
       which: FOUND,
       fs: emptyProject(),
-      prompt: approvingPrompt(),
     });
     expect(result.stderr).toBe("");
     const report = JSON.parse(result.stdout) as { next: { id: string; command: string }[] };

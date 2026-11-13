@@ -2,10 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import { SetupError, setup as runSetup, type SetupInput } from "../src/setup.ts";
 import type {
-  CodexArtifact,
   InstalledPlugin,
   PluginRecommendation,
-  SettingsArtifact,
   SetupFs,
   SetupOutcome,
   WhichFn,
@@ -61,12 +59,6 @@ function recommended(outcome: SetupOutcome): [string, string][] {
   return outcome.plugins.map((plugin: PluginRecommendation) => [plugin.name, plugin.status]);
 }
 
-/** The plugin entries the run would write. Empty when it composed nothing. */
-function enabled(outcome: SetupOutcome): Record<string, boolean> {
-  const settings = settingsFile(outcome).settings;
-  return (settings?.enabledPlugins as Record<string, boolean> | undefined) ?? {};
-}
-
 type FakeFsOptions = {
   /** Files that already hold something. Their paths count as present. */
   contents?: Record<string, string>;
@@ -101,31 +93,30 @@ function existing(value: unknown): FakeFsOptions {
   return { contents: { [SETTINGS]: JSON.stringify(value) } };
 }
 
-/** The Claude settings file the run produced. The only artifact there is, so far. */
-function settingsFile(outcome: SetupOutcome): SettingsArtifact {
-  const artifact = outcome.artifacts.find((one) => one.kind === "claude-settings");
-  if (artifact === undefined) throw new Error("the run produced no settings file");
-  return artifact;
+/** A machine holding these binaries and nothing else. */
+function machine(...binaries: string[]): WhichFn {
+  return (binary) => (binaries.includes(binary) ? `/usr/bin/${binary}` : null);
 }
 
-/** The permission rules the run would write. Empty when it wrote nothing. */
-function allowed(outcome: SetupOutcome): string[] {
-  return settingsFile(outcome).settings?.permissions.allow ?? [];
+/** The files a run produced, by kind, in the order they are reported. */
+function kinds(outcome: SetupOutcome): string[] {
+  return outcome.artifacts.map((artifact) => artifact.kind);
+}
+
+/** What the run did to each file, by kind. */
+function statuses(outcome: SetupOutcome): [string, string][] {
+  return outcome.artifacts.map((artifact) => [artifact.kind, artifact.status]);
 }
 
 describe("detection", () => {
   test("package.json alone detects node", () => {
     const { fs } = fakeFs([PACKAGE_JSON]);
-    const outcome = setup({ root: ROOT, fs });
-    expect(outcome.detected).toEqual(["node"]);
-    expect(settingsFile(outcome).status).toBe("applied");
+    expect(setup({ root: ROOT, fs }).detected).toEqual(["node"]);
   });
 
   test("pyproject.toml alone detects python", () => {
     const { fs } = fakeFs([PYPROJECT]);
-    const outcome = setup({ root: ROOT, fs });
-    expect(outcome.detected).toEqual(["python"]);
-    expect(settingsFile(outcome).status).toBe("applied");
+    expect(setup({ root: ROOT, fs }).detected).toEqual(["python"]);
   });
 
   test("both markers detect both types", () => {
@@ -137,251 +128,103 @@ describe("detection", () => {
     const { fs } = fakeFs(["/project/requirements.txt", "/project/setup.py"]);
     const outcome = setup({ root: ROOT, fs });
     expect(outcome.detected).toEqual([]);
-    expect(allowed(outcome).some((rule) => rule.includes("pip") || rule.includes("pytest"))).toBe(
-      false,
-    );
+    expect(outcome.plugins).toEqual([]);
   });
 
-  test("with no marker the type-independent half is still written", () => {
-    const { fs, written } = fakeFs([]);
-    const outcome = setup({ root: ROOT, fs });
-    expect(settingsFile(outcome).status).toBe("applied");
-    expect(outcome.detected).toEqual([]);
-    expect(written.has(SETTINGS)).toBe(true);
-
-    const permissions = settingsFile(outcome).settings!.permissions;
-    expect(permissions.deny).toContain("Read(./.env)");
-    expect(permissions.allow).toEqual([
-      "Edit(./**)",
-      "Write(./**)",
-      "Bash(ls:*)",
-      "Bash(rg:*)",
-      "Bash(fd:*)",
-      "Bash(git:*)",
-      "Bash(gh:*)",
-    ]);
-    expect(permissions.ask).toEqual(["WebFetch"]);
-  });
-
-  test("no marker means no toolchain command is allowed — nothing is guessed", () => {
-    // Searching a directory and using version control hold without a type. A
-    // package manager does not, so none is named.
-    const { fs } = fakeFs([]);
-    const allow = allowed(setup({ root: ROOT, fs }));
-    expect(allow).toContain("Bash(git:*)");
-    for (const guess of ["npm", "uv", "pip", "yarn", "tsc"]) {
-      expect(allow.some((rule) => rule.includes(guess))).toBe(false);
-    }
-  });
-
-  test("the commands every project gets come before the type's own", () => {
-    const { fs } = fakeFs([PACKAGE_JSON]);
-    const allow = allowed(setup({ root: ROOT, fs }));
-    expect(allow.indexOf("Bash(git:*)")).toBeLessThan(allow.indexOf("Bash(npm:*)"));
-  });
-
-  test("no rule is written twice, whatever the type", () => {
+  test("the type changes nothing about which files are written", () => {
     for (const markers of [[], [PACKAGE_JSON], [PYPROJECT], [PACKAGE_JSON, PYPROJECT]]) {
-      const allow = allowed(setup({ root: ROOT, fs: fakeFs(markers).fs }));
-      expect(new Set(allow).size).toBe(allow.length);
-    }
-  });
-
-  test("the commands nobody can undo are denied, even where the command is allowed", () => {
-    // Version control is opened whole, so the deny is what keeps the ends that
-    // cannot be walked back out of reach (ADR-0006).
-    const { fs } = fakeFs([PACKAGE_JSON]);
-    const permissions = settingsFile(setup({ root: ROOT, fs })).settings!.permissions;
-    expect(permissions.allow).toContain("Bash(git:*)");
-    for (const rule of ["Bash(git push --force:*)", "Bash(git reset --hard:*)", "Bash(env)"]) {
-      expect(permissions.deny).toContain(rule);
+      const { fs, written } = fakeFs(markers);
+      expect(statuses(setup({ root: ROOT, fs }))).toEqual([
+        ["agents-md", "applied"],
+        ["claude-md", "applied"],
+      ]);
+      expect([...written.keys()]).toEqual([AGENTS_MD, CLAUDE_MD]);
     }
   });
 });
 
 describe("what gets written", () => {
-  test("node gets the npm commands, wrapped as Bash rules", () => {
-    const { fs } = fakeFs([PACKAGE_JSON]);
-    const allow = allowed(setup({ root: ROOT, fs }));
-    expect(allow).toContain("Bash(npm:*)");
-    expect(allow).toContain("Bash(node:*)");
-    expect(allow.some((rule) => rule.includes("uv"))).toBe(false);
+  test("the guidance file and the line that points Claude Code at it, and nothing else", () => {
+    const { fs, written } = fakeFs([PACKAGE_JSON]);
+    const outcome = setup({ root: ROOT, fs });
+    expect(kinds(outcome)).toEqual(["agents-md", "claude-md"]);
+    expect([...written.keys()]).toEqual([AGENTS_MD, CLAUDE_MD]);
+    expect(written.get(CLAUDE_MD)).toBe("@AGENTS.md\n");
   });
 
-  test("python gets the uv commands", () => {
-    const { fs } = fakeFs([PYPROJECT]);
-    const allow = allowed(setup({ root: ROOT, fs }));
-    expect(allow).toContain("Bash(uv:*)");
-    expect(allow).toContain("Bash(pytest:*)");
-    expect(allow.some((rule) => rule.includes("npm"))).toBe(false);
-  });
-
-  test("WebFetch is asked about, whatever the project type", () => {
-    for (const marker of [PACKAGE_JSON, PYPROJECT]) {
-      const outcome = setup({ root: ROOT, fs: fakeFs([marker]).fs });
-      expect(settingsFile(outcome).settings!.permissions.ask).toEqual(["WebFetch"]);
-      expect(settingsFile(outcome).settings!.permissions.allow).not.toContain("WebFetch");
+  test("no permission file is written, whatever harness the machine holds", () => {
+    for (const which of [machine(), machine("claude"), machine("codex"), machine("claude", "codex")]) {
+      const { fs, written } = fakeFs([PACKAGE_JSON, PYPROJECT]);
+      setup({ root: ROOT, fs, which });
+      expect(written.has(SETTINGS)).toBe(false);
+      expect(written.has(CODEX_CONFIG)).toBe(false);
     }
   });
 
-  test("only permissions is written — no other key rides along", () => {
+  test("the pointer is written on a machine that holds only Codex", () => {
+    // The project is handed to more machines than the one it was set up on, and
+    // the line costs nothing where Claude Code never reads it.
+    const { fs, written } = fakeFs([PACKAGE_JSON]);
+    const outcome = setup({ root: ROOT, fs, which: machine("codex") });
+    expect(kinds(outcome)).toEqual(["agents-md", "claude-md"]);
+    expect(written.has(CLAUDE_MD)).toBe(true);
+  });
+
+  test("the outcome says which harness is here, and nothing about files", () => {
+    const outcome = setup({ root: ROOT, fs: fakeFs([]).fs, which: machine("codex") });
+    expect(outcome.harnesses).toEqual([
+      { id: "claude-code", installed: false },
+      { id: "codex", installed: true },
+    ]);
+  });
+
+  test("a second run finds both files standing and writes neither", () => {
     const { fs, written } = fakeFs([PACKAGE_JSON]);
     setup({ root: ROOT, fs });
-    const parsed = JSON.parse(written.get(SETTINGS)!);
-    expect(Object.keys(parsed)).toEqual(["permissions"]);
-    expect(Object.keys(parsed.permissions)).toEqual(["defaultMode", "deny", "allow", "ask"]);
-  });
+    const before = new Map(written);
 
-  test("secrets stay closed, whatever else the baseline opens", () => {
-    for (const marker of [PACKAGE_JSON, PYPROJECT]) {
-      const deny = settingsFile(setup({ root: ROOT, fs: fakeFs([marker]).fs })).settings!.permissions.deny;
-      for (const rule of ["Read(./.env)", "Read(./**/*.key)", "Read(~/.ssh/**)"]) {
-        expect(deny).toContain(rule);
-      }
-    }
-  });
-
-  test("editing files inside the project needs no prompt", () => {
-    const { fs } = fakeFs([PACKAGE_JSON]);
-    const settings = settingsFile(setup({ root: ROOT, fs })).settings!;
-    expect(settings.permissions.allow).toContain("Edit(./**)");
-    expect(settings.permissions.allow).toContain("Write(./**)");
-    expect(settings.permissions.defaultMode).toBe("acceptEdits");
-  });
-
-  test("both markers merge as a union, not as one side winning", () => {
-    const { fs } = fakeFs([PACKAGE_JSON, PYPROJECT]);
-    const union = allowed(setup({ root: ROOT, fs }));
-
-    const node = allowed(setup({ root: ROOT, fs: fakeFs([PACKAGE_JSON]).fs }));
-    const python = allowed(setup({ root: ROOT, fs: fakeFs([PYPROJECT]).fs }));
-
-    for (const rule of [...node, ...python]) expect(union).toContain(rule);
-    expect(new Set(union).size).toBe(union.length);
-  });
-
-  test("the file is valid JSON in the Claude Code permissions shape", () => {
-    const { fs, written } = fakeFs([PACKAGE_JSON]);
-    setup({ root: ROOT, fs });
-    const parsed = JSON.parse(written.get(SETTINGS)!);
-    expect(Array.isArray(parsed.permissions.allow)).toBe(true);
-    expect(parsed.permissions.allow.length).toBeGreaterThan(0);
-  });
-
-  test("it writes .claude/settings.json under the given root", () => {
-    const { fs, written } = fakeFs([PACKAGE_JSON]);
-    const outcome = setup({ root: ROOT, fs });
-    expect(settingsFile(outcome).path).toBe(SETTINGS);
-    expect(written.has(SETTINGS)).toBe(true);
-  });
-
-  test("the outcome carries the same settings that landed on disk", () => {
-    const { fs, written } = fakeFs([PYPROJECT]);
-    const outcome = setup({ root: ROOT, fs });
-    expect(JSON.parse(written.get(SETTINGS)!)).toEqual(settingsFile(outcome).settings);
+    const second = setup({ root: ROOT, fs });
+    expect(statuses(second)).toEqual([
+      ["agents-md", "skipped"],
+      ["claude-md", "skipped"],
+    ]);
+    expect(written).toEqual(before);
   });
 });
 
-describe("an existing settings file", () => {
-  test("is planned as a merge, and nothing is written on its own", () => {
-    const { fs, written } = fakeFs([PACKAGE_JSON], existing({ permissions: { allow: [] } }));
-    const outcome = setup({ root: ROOT, fs });
-    expect(settingsFile(outcome).status).toBe("planned");
-    expect(settingsFile(outcome).plan).not.toBeNull();
+describe("files that already stand", () => {
+  test("a settings file is left byte for byte as it was", () => {
+    const mine = '{ "permissions": { "allow": ["Bash(terraform:*)"] }, "hooks": {} }';
+    const { fs, written } = fakeFs([PACKAGE_JSON], { contents: { [SETTINGS]: mine } });
+    setup({ root: ROOT, fs });
     expect(written.has(SETTINGS)).toBe(false);
+    expect(fs.read(SETTINGS)).toBe(mine);
   });
 
-  test("keeps every rule it already held", () => {
-    const mine = ["Bash(terraform:*)", "Bash(docker:*)"];
-    const { fs } = fakeFs([PACKAGE_JSON], existing({ permissions: { allow: mine } }));
-    const allow = settingsFile(setup({ root: ROOT, fs })).settings!.permissions.allow;
-    for (const rule of mine) expect(allow).toContain(rule);
-    expect(allow).toContain("Bash(npm:*)");
-    // The rules that were there stay in front, so the diff does not read as a rewrite.
-    expect(allow.slice(0, mine.length)).toEqual(mine);
+  test("a Codex config is never opened, let alone written", () => {
+    // Present as a path and holding nothing readable: a read would throw.
+    const { fs, written } = fakeFs([PACKAGE_JSON, CODEX_CONFIG]);
+    expect(() => setup({ root: ROOT, fs })).not.toThrow();
+    expect(written.has(CODEX_CONFIG)).toBe(false);
   });
 
-  test("a file that opened a command whole still gets the ends closed", () => {
-    // A merge only ever adds, so a file that allows version control keeps that
-    // allow and gains the deny beside it — no conflict, nothing to settle.
-    const { fs } = fakeFs(
-      [PACKAGE_JSON],
-      existing({ permissions: { allow: ["Bash(git:*)"], deny: [] } }),
-    );
-    const plan = settingsFile(setup({ root: ROOT, fs })).plan!;
-    expect(plan.conflicts).toEqual([]);
-    expect(plan.added.deny).toContain("Bash(git push --force:*)");
-    expect(plan.merged.permissions.allow).toContain("Bash(git:*)");
-    expect(plan.added.allow).not.toContain("Bash(git:*)");
+  test("a settings file is not opened where no type was recognised", () => {
+    const { fs } = fakeFs([], { contents: { [SETTINGS]: "{ not json" } });
+    expect(() => setup({ root: ROOT, fs })).not.toThrow();
   });
 
-  test("a rule the file already has is not added twice", () => {
-    const { fs } = fakeFs(
-      [PACKAGE_JSON],
-      existing({ permissions: { allow: ["Bash(npm:*)", "Edit(./**)"] } }),
-    );
-    const outcome = setup({ root: ROOT, fs });
-    const allow = settingsFile(outcome).settings!.permissions.allow;
-    expect(allow.filter((rule) => rule === "Bash(npm:*)")).toHaveLength(1);
-    expect(settingsFile(outcome).plan!.added.allow).not.toContain("Bash(npm:*)");
-  });
-
-  test("keys prep knows nothing about survive the merge", () => {
-    const { fs } = fakeFs(
-      [PACKAGE_JSON],
-      existing({
-        hooks: { SessionStart: [{ command: "echo hi" }] },
-        env: { DEBUG: "1" },
-        permissions: { allow: [], additionalDirectories: ["../shared"] },
-      }),
-    );
-    const merged = settingsFile(setup({ root: ROOT, fs })).settings!;
-    expect(merged.hooks).toEqual({ SessionStart: [{ command: "echo hi" }] });
-    expect(merged.env).toEqual({ DEBUG: "1" });
-    expect(merged.permissions.additionalDirectories).toEqual(["../shared"]);
-  });
-
-  test("a differing mode is reported as a conflict, and the existing value stands until asked", () => {
-    const { fs } = fakeFs([PACKAGE_JSON], existing({ permissions: { defaultMode: "plan" } }));
-    const outcome = setup({ root: ROOT, fs });
-    expect(settingsFile(outcome).plan!.conflicts).toEqual([
-      { key: "defaultMode", existing: "plan", preset: "acceptEdits" },
-    ]);
-    expect(settingsFile(outcome).settings!.permissions.defaultMode).toBe("plan");
-  });
-
-  test("a file with no mode of its own takes the preset's without asking", () => {
-    const { fs } = fakeFs([PACKAGE_JSON], existing({ permissions: { allow: [] } }));
-    const outcome = setup({ root: ROOT, fs });
-    expect(settingsFile(outcome).plan!.conflicts).toEqual([]);
-    expect(settingsFile(outcome).settings!.permissions.defaultMode).toBe("acceptEdits");
-  });
-
-  test("a file that already covers the baseline is left with nothing to propose", () => {
-    const { fs, written } = fakeFs([PACKAGE_JSON]);
-    const applied = setup({ root: ROOT, fs });
-    expect(settingsFile(applied).status).toBe("applied");
-
-    const second = setup({ root: ROOT, fs });
-    expect(settingsFile(second).status).toBe("skipped");
-    expect(settingsFile(second).settings).toBeNull();
-    expect(written.get(SETTINGS)).toBe(JSON.stringify(settingsFile(applied).settings, null, 2) + "\n");
-  });
-
-  test("malformed JSON is a tool error, not a silent no-op", () => {
+  test("malformed JSON in the settings file is a tool error, not a silent no-op", () => {
     const { fs } = fakeFs([PACKAGE_JSON], { contents: { [SETTINGS]: "{ not json" } });
     expect(() => setup({ root: ROOT, fs })).toThrow(SetupError);
     expect(() => setup({ root: ROOT, fs })).toThrow(SETTINGS);
   });
 
-  test("a permissions block prep cannot merge stops the run instead of rewriting it", () => {
-    for (const shape of [{ permissions: [] }, { permissions: { allow: "Bash(npm:*)" } }]) {
-      const { fs } = fakeFs([PACKAGE_JSON], existing(shape));
-      expect(() => setup({ root: ROOT, fs })).toThrow(SetupError);
-    }
+  test("a settings file that is not an object is a tool error too", () => {
+    const { fs } = fakeFs([PACKAGE_JSON], existing(["not", "an", "object"]));
+    expect(() => setup({ root: ROOT, fs })).toThrow(SetupError);
   });
 
-  test("a file that cannot be read is a tool error naming the path", () => {
+  test("a settings file that cannot be read is a tool error naming the path", () => {
     const { fs } = fakeFs([PACKAGE_JSON, SETTINGS]);
     try {
       setup({ root: ROOT, fs });
@@ -391,39 +234,31 @@ describe("an existing settings file", () => {
       expect((error as Error).message).toContain(SETTINGS);
     }
   });
+
+  test("nothing is written before a settings file turns out to be unreadable", () => {
+    const { fs, written } = fakeFs([PACKAGE_JSON], { contents: { [SETTINGS]: "{ not json" } });
+    expect(() => setup({ root: ROOT, fs })).toThrow(SetupError);
+    expect(written.size).toBe(0);
+  });
 });
 
 describe("dry run", () => {
-  test("plans without writing", () => {
+  test("plans both files without writing either", () => {
     const { fs, written } = fakeFs([PACKAGE_JSON]);
     const outcome = setup({ root: ROOT, dryRun: true, fs });
-    expect(settingsFile(outcome).status).toBe("planned");
+    expect(statuses(outcome)).toEqual([
+      ["agents-md", "planned"],
+      ["claude-md", "planned"],
+    ]);
     expect(written.size).toBe(0);
   });
 
-  test("shows the very settings a real run would write", () => {
-    const planned = setup({ root: ROOT, dryRun: true, fs: fakeFs([PACKAGE_JSON, PYPROJECT]).fs });
-    const applied = setup({ root: ROOT, fs: fakeFs([PACKAGE_JSON, PYPROJECT]).fs });
-    expect(settingsFile(planned).settings).toEqual(settingsFile(applied).settings);
-  });
-
-  test("shows the merge when the file already exists, and still writes nothing", () => {
-    const { fs, written } = fakeFs([PACKAGE_JSON], existing({ permissions: { allow: [] } }));
-    const outcome = setup({ root: ROOT, dryRun: true, fs });
-    expect(settingsFile(outcome).status).toBe("planned");
-    expect(settingsFile(outcome).plan!.added.allow).toContain("Bash(npm:*)");
-    expect(written.size).toBe(0);
-  });
-
-  test("with no marker it plans the type-independent half", () => {
-    const { fs, written } = fakeFs([]);
-    const outcome = setup({ root: ROOT, dryRun: true, fs });
-    expect(settingsFile(outcome).status).toBe("planned");
-    const allow = settingsFile(outcome).settings!.permissions.allow;
-    expect(allow).toContain("Edit(./**)");
-    expect(allow).toContain("Bash(git:*)");
-    expect(allow.some((rule) => rule.includes("npm"))).toBe(false);
-    expect(written.size).toBe(0);
+  test("shows the very text a real run would write", () => {
+    const planned = setup({ root: ROOT, dryRun: true, fs: fakeFs([PACKAGE_JSON]).fs });
+    const applied = setup({ root: ROOT, fs: fakeFs([PACKAGE_JSON]).fs });
+    expect(planned.artifacts.map((artifact) => artifact.contents)).toEqual(
+      applied.artifacts.map((artifact) => artifact.contents),
+    );
   });
 
   test("still points at the machine — what is owed is true before anything is written", () => {
@@ -468,7 +303,7 @@ describe("errors", () => {
     try {
       setup({ root: ROOT, fs });
     } catch (error) {
-      expect((error as Error).message).toContain(SETTINGS);
+      expect((error as Error).message).toContain(AGENTS_MD);
       expect((error as Error).message).toContain("EACCES");
     }
   });
@@ -510,81 +345,72 @@ describe("the plugins a project type calls for", () => {
     const { fs, written } = fakeFs([PACKAGE_JSON]);
     const outcome = setup({ root: ROOT, fs });
     expect(recommended(outcome)).toEqual([["typescript-lsp", "missing"]]);
-    expect(enabled(outcome)).toEqual({});
-    expect(JSON.parse(written.get(SETTINGS)!).enabledPlugins).toBeUndefined();
+    expect(written.has(SETTINGS)).toBe(false);
   });
 
-  test("a machine-wide install is turned on in this project", () => {
+  test("a machine-wide install is reported as installed, and no entry is written for it", () => {
     const { fs, written } = fakeFs([PACKAGE_JSON], holding(machineWide(TYPESCRIPT)));
     const outcome = setup({ root: ROOT, fs });
     expect(recommended(outcome)).toEqual([["typescript-lsp", "installed"]]);
-    expect(enabled(outcome)).toEqual({ [TYPESCRIPT]: true });
-    expect(JSON.parse(written.get(SETTINGS)!).enabledPlugins).toEqual({ [TYPESCRIPT]: true });
+    expect(written.has(SETTINGS)).toBe(false);
   });
 
   test("an install scoped to another project does not count here", () => {
     const { fs } = fakeFs([PACKAGE_JSON], holding(forProject(TYPESCRIPT, "/somewhere/else")));
-    const outcome = setup({ root: ROOT, fs });
-    expect(recommended(outcome)).toEqual([["typescript-lsp", "missing"]]);
-    expect(enabled(outcome)).toEqual({});
+    expect(recommended(setup({ root: ROOT, fs }))).toEqual([["typescript-lsp", "missing"]]);
   });
 
   test("an install scoped to this project counts", () => {
     const { fs } = fakeFs([PACKAGE_JSON], holding(forProject(TYPESCRIPT, ROOT)));
-    expect(enabled(setup({ root: ROOT, fs }))).toEqual({ [TYPESCRIPT]: true });
+    expect(recommended(setup({ root: ROOT, fs }))).toEqual([["typescript-lsp", "installed"]]);
   });
 
-  test("only the installed half of a polyglot project's plugins is turned on", () => {
+  test("each half of a polyglot project's plugins is read on its own", () => {
     const { fs } = fakeFs([PACKAGE_JSON, PYPROJECT], holding(machineWide(PYRIGHT)));
-    const outcome = setup({ root: ROOT, fs });
-    expect(recommended(outcome)).toEqual([
+    expect(recommended(setup({ root: ROOT, fs }))).toEqual([
       ["typescript-lsp", "missing"],
       ["pyright-lsp", "installed"],
     ]);
-    expect(enabled(outcome)).toEqual({ [PYRIGHT]: true });
   });
 
-  test("turning one on goes through the merge, so an existing file is planned and not written", () => {
-    const settings = existing({ permissions: { allow: [] } });
-    const { fs, written } = fakeFs([PACKAGE_JSON], {
-      contents: { ...settings.contents, ...record(machineWide(TYPESCRIPT)) },
-    });
-    const outcome = setup({ root: ROOT, fs });
-    expect(settingsFile(outcome).status).toBe("planned");
-    expect(settingsFile(outcome).plan!.addedPlugins).toEqual([TYPESCRIPT]);
-    expect(written.has(SETTINGS)).toBe(false);
-  });
-
-  test("an entry already in the settings file is left exactly as it is, on or off", () => {
+  test("an entry already in the settings file answers for the plugin, on or off", () => {
     for (const value of [true, false]) {
       const settings = existing({
         permissions: { allow: [] },
         enabledPlugins: { [TYPESCRIPT]: value },
       });
-      const { fs } = fakeFs([PACKAGE_JSON], {
+      const { fs, written } = fakeFs([PACKAGE_JSON], {
         contents: { ...settings.contents, ...record(machineWide(TYPESCRIPT)) },
       });
       const outcome = setup({ root: ROOT, fs });
       expect(recommended(outcome)).toEqual([["typescript-lsp", "answered"]]);
-      expect(settingsFile(outcome).plan!.addedPlugins).toEqual([]);
-      expect(settingsFile(outcome).settings!.enabledPlugins).toEqual({ [TYPESCRIPT]: value });
+      expect(written.has(SETTINGS)).toBe(false);
     }
   });
 
-  test("a second run over prep's own output has nothing left to propose", () => {
-    const { fs } = fakeFs([PACKAGE_JSON], holding(machineWide(TYPESCRIPT)));
-    expect(settingsFile(setup({ root: ROOT, fs })).status).toBe("applied");
+  test("a settings file that says nothing about plugins answers for none", () => {
+    for (const shape of [{}, { permissions: {} }, { enabledPlugins: [TYPESCRIPT] }]) {
+      const settings = existing(shape);
+      const { fs } = fakeFs([PACKAGE_JSON], {
+        contents: { ...settings.contents, ...record(machineWide(TYPESCRIPT)) },
+      });
+      expect(recommended(setup({ root: ROOT, fs }))).toEqual([["typescript-lsp", "installed"]]);
+    }
+  });
 
-    const second = setup({ root: ROOT, fs });
-    expect(settingsFile(second).status).toBe("skipped");
-    expect(recommended(second)).toEqual([["typescript-lsp", "answered"]]);
+  test("the recommendation is made whether or not Claude Code is on the machine", () => {
+    const { fs } = fakeFs([PACKAGE_JSON], holding(machineWide(TYPESCRIPT)));
+    for (const which of [machine(), machine("codex"), machine("claude")]) {
+      expect(setup({ root: ROOT, fs, which }).plugins.map((plugin) => plugin.name)).toEqual([
+        "typescript-lsp",
+      ]);
+    }
   });
 
   test("a dry run reports the same recommendation and writes nothing", () => {
     const { fs, written } = fakeFs([PACKAGE_JSON], holding(machineWide(TYPESCRIPT)));
     const outcome = setup({ root: ROOT, dryRun: true, fs });
     expect(recommended(outcome)).toEqual([["typescript-lsp", "installed"]]);
-    expect(enabled(outcome)).toEqual({ [TYPESCRIPT]: true });
     expect(written.size).toBe(0);
   });
 
@@ -608,26 +434,11 @@ describe("the plugins a project type calls for", () => {
     ]);
   });
 
-  test("a plugin whose server is not on PATH is not turned on — the entry would configure nothing", () => {
-    const { fs, written } = fakeFs([PACKAGE_JSON], holding(machineWide(TYPESCRIPT)));
+  test("a server that is not on PATH is reported apart from the plugin's own status", () => {
+    const { fs } = fakeFs([PACKAGE_JSON], holding(machineWide(TYPESCRIPT)));
     const outcome = setup({ root: ROOT, fs, which: () => null });
     expect(recommended(outcome)).toEqual([["typescript-lsp", "installed"]]);
     expect(outcome.plugins[0]!.server.status).toBe("missing");
-    expect(enabled(outcome)).toEqual({});
-    expect(JSON.parse(written.get(SETTINGS)!).enabledPlugins).toBeUndefined();
-  });
-
-  test("installing the server is all that stands between the two runs", () => {
-    const held = holding(machineWide(TYPESCRIPT));
-    const without = setup({ root: ROOT, fs: fakeFs([PACKAGE_JSON], held).fs, which: () => null });
-    const with_ = setup({ root: ROOT, fs: fakeFs([PACKAGE_JSON], held).fs });
-    expect(enabled(without)).toEqual({});
-    expect(enabled(with_)).toEqual({ [TYPESCRIPT]: true });
-  });
-
-  test("a plugin block prep cannot read stops the run instead of rewriting it", () => {
-    const { fs } = fakeFs([PACKAGE_JSON], existing({ enabledPlugins: [TYPESCRIPT] }));
-    expect(() => setup({ root: ROOT, fs })).toThrow(SetupError);
   });
 });
 
@@ -677,19 +488,15 @@ describe("the handoff check", () => {
   });
 
   test("it is read on a run that writes nothing at all", () => {
-    const baseline = settingsFile(setup({ root: ROOT, fs: fakeFs([PACKAGE_JSON]).fs })).settings;
-    const { fs } = fakeFs([PACKAGE_JSON], {
-      contents: { ...SETTLED.contents, [SETTINGS]: JSON.stringify(baseline) },
-    });
+    const { fs, written } = fakeFs([PACKAGE_JSON], SETTLED);
     const outcome = setup({ root: ROOT, fs });
-    expect(settingsFile(outcome).status).toBe("skipped");
+    expect(written.size).toBe(0);
     expect(outcome.handoff.every((result) => result.status === "ready")).toBe(true);
   });
 
   test("it is read on a dry run too — reading owes nothing to writing", () => {
     const { fs } = fakeFs([PACKAGE_JSON], SETTLED);
     const outcome = setup({ root: ROOT, dryRun: true, fs });
-    expect(settingsFile(outcome).status).toBe("planned");
     expect(outcome.handoff.every((result) => result.status === "ready")).toBe(true);
   });
 
@@ -707,143 +514,5 @@ describe("the handoff check", () => {
     const { fs } = fakeFs([PACKAGE_JSON, CLAUDE_MD]);
     expect(() => setup({ root: ROOT, fs })).toThrow(SetupError);
     expect(() => setup({ root: ROOT, fs })).toThrow(/CLAUDE\.md/);
-  });
-});
-
-describe("which harness the files are written for", () => {
-  /** A machine holding these binaries and nothing else. */
-  function machine(...binaries: string[]): WhichFn {
-    return (binary) => (binaries.includes(binary) ? `/usr/bin/${binary}` : null);
-  }
-
-  /** The files a run produced, by kind, in the order they are reported. */
-  function kinds(outcome: SetupOutcome): string[] {
-    return outcome.artifacts.map((artifact) => artifact.kind);
-  }
-
-  test("a machine with both harnesses gets the files both of them read", () => {
-    const { fs, written } = fakeFs([PACKAGE_JSON]);
-    const outcome = setup({ root: ROOT, fs, which: machine("claude", "codex") });
-    expect(kinds(outcome)).toEqual(["claude-settings", "codex-config", "agents-md", "claude-md"]);
-    expect(written.has(SETTINGS)).toBe(true);
-    expect(written.has(CODEX_CONFIG)).toBe(true);
-  });
-
-  test("with only Claude Code here, no Codex file is written", () => {
-    const { fs, written } = fakeFs([PACKAGE_JSON]);
-    const outcome = setup({ root: ROOT, fs, which: machine("claude") });
-    expect(kinds(outcome)).toEqual(["claude-settings", "agents-md", "claude-md"]);
-    expect(written.has(CODEX_CONFIG)).toBe(false);
-  });
-
-  test("with only Codex here, no Claude file is written", () => {
-    const { fs, written } = fakeFs([PACKAGE_JSON]);
-    const outcome = setup({ root: ROOT, fs, which: machine("codex") });
-    expect(kinds(outcome)).toEqual(["codex-config", "agents-md"]);
-    expect(written.has(SETTINGS)).toBe(false);
-    expect(written.has(CLAUDE_MD)).toBe(false);
-    expect(written.has(CODEX_CONFIG)).toBe(true);
-  });
-
-  test("the guidance file is written whatever the machine holds — both harnesses read it", () => {
-    for (const which of [machine(), machine("claude"), machine("codex"), machine("claude", "codex")]) {
-      const { fs, written } = fakeFs([PACKAGE_JSON]);
-      expect(kinds(setup({ root: ROOT, fs, which }))).toContain("agents-md");
-      expect(written.has(AGENTS_MD)).toBe(true);
-    }
-  });
-
-  test("with no harness at all the Claude files are written anyway", () => {
-    const { fs, written } = fakeFs([PACKAGE_JSON]);
-    const outcome = setup({ root: ROOT, fs, which: machine() });
-    expect(kinds(outcome)).toEqual(["claude-settings", "agents-md", "claude-md"]);
-    expect(written.has(SETTINGS)).toBe(true);
-    expect(written.has(CODEX_CONFIG)).toBe(false);
-  });
-
-  test("the outcome says which harness is here and which one this run wrote for", () => {
-    const outcome = setup({ root: ROOT, fs: fakeFs([]).fs, which: machine("codex") });
-    expect(outcome.harnesses).toEqual([
-      { id: "claude-code", installed: false, covered: false },
-      { id: "codex", installed: true, covered: true },
-    ]);
-  });
-
-  test("a fallback run says so: nothing installed, and the Claude files written regardless", () => {
-    const outcome = setup({ root: ROOT, fs: fakeFs([]).fs, which: machine() });
-    expect(outcome.harnesses).toEqual([
-      { id: "claude-code", installed: false, covered: true },
-      { id: "codex", installed: false, covered: false },
-    ]);
-  });
-
-  test("no plugin is recommended where no settings file is written", () => {
-    const { fs } = fakeFs([PACKAGE_JSON], {
-      contents: record({ id: TYPESCRIPT, scope: "user", projectPath: null }),
-    });
-    expect(setup({ root: ROOT, fs, which: machine("codex") }).plugins).toEqual([]);
-  });
-
-  test("an unreadable install record cannot fail a run that writes no settings file", () => {
-    const { fs } = fakeFs([PACKAGE_JSON], { contents: { [RECORD]: "{ not json" } });
-    expect(() => setup({ root: ROOT, fs, which: machine("codex") })).not.toThrow();
-  });
-});
-
-describe("the Codex permission file", () => {
-  function codexFile(outcome: SetupOutcome): CodexArtifact {
-    const artifact = outcome.artifacts.find((one) => one.kind === "codex-config");
-    if (artifact === undefined) throw new Error("the run produced no Codex file");
-    return artifact;
-  }
-
-  test("it holds the same secret paths the Claude baseline denies", () => {
-    const { fs, written } = fakeFs([PACKAGE_JSON]);
-    const outcome = setup({ root: ROOT, fs });
-    expect(codexFile(outcome).status).toBe("applied");
-
-    const document = Bun.TOML.parse(written.get(CODEX_CONFIG)!) as Record<string, any>;
-    const filesystem = document.permissions["project-edit"].filesystem;
-    expect(filesystem[":workspace_roots"][".env"]).toBe("deny");
-    expect(filesystem["~/.ssh"]).toBe("deny");
-    expect(document.default_permissions).toBe("project-edit");
-  });
-
-  test("a file that is already there is not touched", () => {
-    const mine = 'model = "o3"\n';
-    const { fs, written } = fakeFs([], { contents: { [CODEX_CONFIG]: mine } });
-    const artifact = codexFile(setup({ root: ROOT, fs }));
-    expect(artifact.status).toBe("skipped");
-    expect(artifact.config).toBeNull();
-    expect(written.has(CODEX_CONFIG)).toBe(false);
-  });
-
-  test("an existing sandbox mode is reported, because it turns the profile off", () => {
-    const theirs = 'sandbox_mode = "workspace-write"\n';
-    const { fs } = fakeFs([], { contents: { [CODEX_CONFIG]: theirs } });
-    expect(codexFile(setup({ root: ROOT, fs })).sandboxMode).toBe(true);
-  });
-
-  test("a file prep writes itself sets no sandbox mode", () => {
-    const { fs } = fakeFs([PACKAGE_JSON]);
-    expect(codexFile(setup({ root: ROOT, fs })).sandboxMode).toBe(false);
-  });
-
-  test("a dry run plans it and writes nothing", () => {
-    const { fs, written } = fakeFs([PACKAGE_JSON]);
-    const artifact = codexFile(setup({ root: ROOT, dryRun: true, fs }));
-    expect(artifact.status).toBe("planned");
-    expect(artifact.config?.workspace[0]).toBe(".env");
-    expect(written.size).toBe(0);
-  });
-
-  test("a failed write surfaces as a tool error naming the path", () => {
-    const { fs } = fakeFs([PACKAGE_JSON], {
-      onWrite: (path) => {
-        if (path === CODEX_CONFIG) throw new Error("EACCES: permission denied");
-      },
-    });
-    expect(() => setup({ root: ROOT, fs })).toThrow(SetupError);
-    expect(() => setup({ root: ROOT, fs })).toThrow(/config\.toml/);
   });
 });

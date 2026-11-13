@@ -185,19 +185,11 @@ function fakeFs(present: readonly string[], contents: Record<string, string> = {
 
 /** The file pointing Claude Code at the guidance. */
 const POINTER = "/project/CLAUDE.md";
-/** The Codex permission file. */
-const CODEX_CONFIG = "/project/.codex/config.toml";
 
-/**
- * Every file prep writes without asking, already on disk.
- *
- * A run against this has nothing left to do but the merge, which is what the
- * blocks below are about: any write they see is the one under test.
- */
+/** Every file prep writes, already on disk. A run against this has nothing left to do. */
 const SEEDED = {
   [GUIDANCE]: "# AGENTS.md\n\n## Language\n\nEnglish in the repository.\n",
   [POINTER]: "@AGENTS.md\n",
-  [CODEX_CONFIG]: 'default_permissions = "project-edit"\n',
 };
 
 describe("--json with a project", () => {
@@ -280,30 +272,18 @@ describe("--json with a project", () => {
   });
 });
 
-type SettingsPayload = {
-  kind: "claude-settings";
+type ArtifactPayload = {
+  kind: "agents-md" | "claude-md";
   path: string;
   status: string;
-  settings: {
-    permissions: { defaultMode: string; deny: string[]; allow: string[]; ask: string[] };
-    enabledPlugins?: Record<string, boolean>;
-  } | null;
-  merge: {
-    existing: Record<string, unknown>;
-    added: { deny: string[]; allow: string[]; ask: string[] };
-    addedPlugins: string[];
-    conflicts: { key: string; existing: string; preset: string }[];
-  } | null;
+  contents: string | null;
 };
-
-type SeedPayload = { kind: "agents-md"; path: string; status: string; contents: string | null };
-
-type ArtifactPayload = SettingsPayload | SeedPayload;
 
 type SetupPayload = {
   root: string;
   detected: string[];
   artifacts: ArtifactPayload[];
+  harnesses: Record<string, unknown>[];
   plugins: {
     name: string;
     marketplace: string;
@@ -322,75 +302,79 @@ async function setupJson(
   const payload = result.stdout ? (JSON.parse(result.stdout) as SetupPayload) : null;
   // Found by kind, never by position: a consumer that indexes the array breaks
   // the moment a run produces its files in another order.
-  const found = <K extends ArtifactPayload["kind"]>(kind: K) =>
-    (payload?.artifacts.find((one) => one.kind === kind) ?? null) as
-      | Extract<ArtifactPayload, { kind: K }>
-      | null;
+  const found = (kind: ArtifactPayload["kind"]) =>
+    payload?.artifacts.find((one) => one.kind === kind) ?? null;
 
-  return { result, payload, settingsFile: found("claude-settings"), seedFile: found("agents-md") };
+  return { result, payload, seedFile: found("agents-md"), pointerFile: found("claude-md") };
 }
 
 describe("setup --json", () => {
   test("stdout parses whole as JSON and carries the outcome", async () => {
-    const { payload, settingsFile } = await setupJson(["setup", PROJECT, "--json"], [
+    const { payload, seedFile, pointerFile } = await setupJson(["setup", PROJECT, "--json"], [
       PROJECT,
       "/project/package.json",
     ]);
     expect(payload?.root).toBe(PROJECT);
     expect(payload?.detected).toEqual(["node"]);
-    expect(settingsFile?.path).toBe(SETTINGS);
-    expect(settingsFile?.status).toBe("applied");
-    expect(settingsFile?.settings?.permissions.allow).toContain("Bash(npm:*)");
+    expect(seedFile?.path).toBe(GUIDANCE);
+    expect(seedFile?.status).toBe("applied");
+    expect(pointerFile?.path).toBe(POINTER);
+    expect(pointerFile?.contents).toBe("@AGENTS.md\n");
   });
 
-  test("a file that already covers the baseline carries the status without the settings", async () => {
-    // What a dry run says it would write is exactly what a covered file holds.
-    const planned = await setupJson(["setup", PROJECT, "--dry-run", "--json"], [
-      PROJECT,
-      "/project/package.json",
-    ]);
-    const { result, settingsFile } = await setupJson(
+  test("the two files of prose are the only kinds there are", async () => {
+    for (const present of [[PROJECT], [PROJECT, "/project/package.json", "/project/pyproject.toml"]]) {
+      const { payload } = await setupJson(["setup", PROJECT, "--json"], present);
+      expect(payload?.artifacts.map((one) => one.kind)).toEqual(["agents-md", "claude-md"]);
+    }
+  });
+
+  test("a settings file that is there is not an artifact, and is not echoed back", async () => {
+    const { result, payload } = await setupJson(
       ["setup", PROJECT, "--json"],
       [PROJECT, "/project/package.json"],
-      { ...SEEDED, [SETTINGS]: JSON.stringify(planned.settingsFile?.settings) },
+      { [SETTINGS]: JSON.stringify({ permissions: { defaultMode: "plan" }, model: "opus" }) },
     );
-    expect(result.exitCode).toBe(1);
-    expect(settingsFile?.status).toBe("skipped");
-    expect(settingsFile?.settings).toBeNull();
+    expect(result.exitCode).toBe(0);
+    expect(payload?.artifacts.map((one) => one.path)).toEqual([GUIDANCE, POINTER]);
+    expect(result.stdout).not.toContain("settings.json");
+    expect(result.stdout).not.toContain("opus");
   });
 
-  test("an existing file carries the merge: what is there, what is added, what is left to decide", async () => {
-    const { result, settingsFile } = await setupJson(
+  test("files that already stand carry the status without the contents", async () => {
+    const { result, seedFile, pointerFile } = await setupJson(
       ["setup", PROJECT, "--json"],
       [PROJECT, "/project/package.json"],
-      { ...SEEDED, [SETTINGS]: JSON.stringify({ permissions: { defaultMode: "plan" } }) },
+      SEEDED,
     );
     expect(result.exitCode).toBe(1);
-    expect(settingsFile?.status).toBe("planned");
-    expect(settingsFile?.merge?.existing).toEqual({ permissions: { defaultMode: "plan" } });
-    expect(settingsFile?.merge?.added.allow).toContain("Bash(npm:*)");
-    expect(settingsFile?.merge?.conflicts).toEqual([
-      { key: "defaultMode", existing: "plan", preset: "acceptEdits" },
-    ]);
+    expect(seedFile).toEqual({ kind: "agents-md", path: GUIDANCE, status: "skipped", contents: null });
+    expect(pointerFile?.status).toBe("skipped");
   });
 
-  test("no marker gives an empty detected list and the shared rules only", async () => {
-    const { payload, settingsFile } = await setupJson(["setup", PROJECT, "--json"], [PROJECT]);
-    expect(settingsFile?.status).toBe("applied");
+  test("no marker gives an empty detected list and the same two files", async () => {
+    const { payload, seedFile } = await setupJson(["setup", PROJECT, "--json"], [PROJECT]);
+    expect(seedFile?.status).toBe("applied");
     expect(payload?.detected).toEqual([]);
-    const allow = settingsFile?.settings?.permissions.allow ?? [];
-    expect(allow).toContain("Edit(./**)");
-    expect(allow).toContain("Bash(git:*)");
-    expect(allow.some((rule) => rule.includes("npm") || rule.includes("uv"))).toBe(false);
+    expect(payload?.plugins).toEqual([]);
   });
 
   test("a dry run says planned and still shows what it would write", async () => {
-    const { settingsFile } = await setupJson(
+    const { seedFile, pointerFile } = await setupJson(
       ["setup", PROJECT, "--dry-run", "--json"],
       [PROJECT, "/project/pyproject.toml"],
     );
-    expect(settingsFile?.status).toBe("planned");
-    expect(settingsFile?.settings?.permissions.allow).toContain("Bash(uv:*)");
+    expect(seedFile?.status).toBe("planned");
+    expect(seedFile?.contents).toContain("## Language");
+    expect(pointerFile?.status).toBe("planned");
+  });
+
+  test("a harness row carries an id and whether it is installed, and nothing else", async () => {
+    const { payload } = await setupJson(["setup", PROJECT, "--json"], [PROJECT]);
+    expect(payload?.harnesses.map((row) => Object.keys(row))).toEqual([
+      ["id", "installed"],
+      ["id", "installed"],
+    ]);
   });
 
   test("the plugin recommendations carry a name, a marketplace and a status, and no wording", async () => {
@@ -406,35 +390,34 @@ describe("setup --json", () => {
         server: { binary: "typescript-language-server", status: "installed" },
       },
     ]);
-    for (const noise of ["claude plugin install", "not installed", "prep turns it on"]) {
+    for (const noise of ["claude plugin install", "claude plugin enable", "not installed"]) {
       expect(result.stdout).not.toContain(noise);
     }
   });
 
-  test("a plugin the machine holds comes through as an entry the run writes", async () => {
-    const { payload, settingsFile } = await setupJson(
-      ["setup", PROJECT, "--json"],
+  test("a plugin the machine holds comes through as a status, and no file is written for it", async () => {
+    const fs = fakeFs(
       [PROJECT, "/project/package.json"],
       heldMachineWide("typescript-lsp@claude-plugins-official"),
     );
-    expect(payload?.plugins[0]?.status).toBe("installed");
-    expect(settingsFile?.settings?.enabledPlugins).toEqual({
-      "typescript-lsp@claude-plugins-official": true,
-    });
+    const result = await run(["setup", PROJECT, "--json"], { fs });
+    const payload = JSON.parse(result.stdout) as SetupPayload;
+    expect(payload.plugins[0]?.status).toBe("installed");
+    expect(fs.exists(SETTINGS)).toBe(false);
   });
 
-  test("an existing file carries the plugin entries the merge would add", async () => {
-    const { settingsFile } = await setupJson(
+  test("a plugin the settings file already names comes through as answered", async () => {
+    const { payload } = await setupJson(
       ["setup", PROJECT, "--json"],
       [PROJECT, "/project/package.json"],
       {
-        ...SEEDED,
         ...heldMachineWide("typescript-lsp@claude-plugins-official"),
-        [SETTINGS]: JSON.stringify({ permissions: { allow: [] } }),
+        [SETTINGS]: JSON.stringify({
+          enabledPlugins: { "typescript-lsp@claude-plugins-official": false },
+        }),
       },
     );
-    expect(settingsFile?.status).toBe("planned");
-    expect(settingsFile?.merge?.addedPlugins).toEqual(["typescript-lsp@claude-plugins-official"]);
+    expect(payload?.plugins[0]?.status).toBe("answered");
   });
 
   test("the handoff comes through as statuses and paths", async () => {
@@ -458,7 +441,7 @@ describe("setup --json", () => {
 
   test("no human symbols or summary wording leak in", async () => {
     const { result } = await setupJson(["setup", PROJECT, "--json"], [PROJECT, "/project/package.json"]);
-    for (const noise of ["✓", "–", "prep setup ·", "Detected", "Allowing", "Wrote"]) {
+    for (const noise of ["✓", "–", "prep setup ·", "Detected", "still owed", "Wrote"]) {
       expect(result.stdout).not.toContain(noise);
     }
   });

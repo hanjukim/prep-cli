@@ -1,7 +1,9 @@
 # ADR-0007: prep does not merge the Codex config file
 
 **Date:** 2026-08-01
-**Status:** Accepted
+**Status:** Accepted — decisions 1 to 4 are superseded by ADR-0031 (prep writes
+no Codex file, and no longer opens one). Decision 5 stands: a `CLAUDE.md` that
+already exists is left as it is.
 **Sources:** `feat/codex-permission-file`, #29, the matching decision in ADR-0003
 
 ## Context

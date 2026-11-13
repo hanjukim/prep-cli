@@ -1,79 +1,52 @@
 import { describe, expect, test } from "bun:test";
 
-import { planMerge } from "../src/merge.ts";
-import { all } from "../src/presets.ts";
-import { renderMergeSummary, renderSetupHuman } from "../src/report/setup-human.ts";
 import { nextSteps } from "../src/next.ts";
+import { renderSetupHuman } from "../src/report/setup-human.ts";
 import { renderSetupJson } from "../src/report/setup-json.ts";
-import { AGENTS_SEED } from "../src/seed.ts";
+import { AGENTS_SEED, CLAUDE_MD_POINTER } from "../src/seed.ts";
 import type {
+  Artifact,
   ArtifactStatus,
-  ClaudeSettings,
-  CodexConfig,
   HandoffResult,
   HarnessPresence,
   LanguageServer,
-  MergePlan,
   PluginRecommendation,
   PluginStatus,
   ProjectType,
-  SettingsArtifact,
   SetupOutcome,
-  WhichFn,
 } from "../src/types.ts";
 
 const ROOT = "/project";
-const SETTINGS = "/project/.claude/settings.json";
 const AGENTS_MD = "/project/AGENTS.md";
+const CLAUDE_MD = "/project/CLAUDE.md";
 
 const CLAUDE_COMMAND = "claude '/setup-matt-pocock-skills'";
 const CODEX_COMMAND = "codex '$setup-matt-pocock-skills'";
 
 /**
- * A machine holding exactly the named binaries.
+ * The harness rows a run would have carried on a machine holding these.
  *
- * Every fixture goes through one of these rather than the real PATH: what the
- * footer suggests depends on which harnesses are installed, and a fixture that
- * read the machine running the suite would render differently on each one.
+ * Every fixture goes through this rather than the real PATH: what the footer
+ * suggests depends on which harnesses are installed, and a fixture that read the
+ * machine running the suite would render differently on each one.
  */
-function holding(...binaries: readonly string[]): WhichFn {
-  return (binary) => (binaries.includes(binary) ? `/usr/local/bin/${binary}` : null);
+function holding(...ids: readonly string[]): HarnessPresence[] {
+  return (["claude-code", "codex"] as const).map((id) => ({ id, installed: ids.includes(id) }));
 }
 
-const BOTH_HARNESSES = holding("claude", "codex");
+const BOTH_HARNESSES = holding("claude-code", "codex");
 const NO_HARNESS = holding();
-
-/**
- * Both harnesses on the machine.
- *
- * The fixture default, because it is the case the report says nothing about: a
- * run that wrote for everything installed has no hole in its file list to
- * explain. The fixtures that cover the other cases hand in their own rows.
- */
-const BOTH_PRESENT: HarnessPresence[] = [
-  { id: "claude-code", installed: true, covered: true },
-  { id: "codex", installed: true, covered: true },
-];
-
-/** The harness rows a run against that machine would have carried. */
-function presenceFor(which: WhichFn): HarnessPresence[] {
-  const installed = (binary: string) => which(binary) !== null;
-  const none = !installed("claude") && !installed("codex");
-  return [
-    { id: "claude-code", installed: installed("claude"), covered: installed("claude") || none },
-    { id: "codex", installed: installed("codex"), covered: installed("codex") },
-  ];
-}
-
-function settingsWith(allow: string[]): ClaudeSettings {
-  return {
-    permissions: { defaultMode: "acceptEdits", deny: ["Read(./.env)"], allow, ask: ["WebFetch"] },
-  };
-}
 
 /** A project the harness has not been pointed at yet. The ordinary starting state. */
 const UNTOUCHED: HandoffResult[] = [
   { id: "language", status: "missing", path: null },
+  { id: "issue-tracker", status: "missing", path: null },
+  { id: "domain-docs", status: "missing", path: null },
+];
+
+/** What a project reads as right after prep seeded it: the language is answered, the rest is not. */
+const JUST_SEEDED: HandoffResult[] = [
+  { id: "language", status: "ready", path: "AGENTS.md" },
   { id: "issue-tracker", status: "missing", path: null },
   { id: "domain-docs", status: "missing", path: null },
 ];
@@ -92,84 +65,62 @@ const HALFWAY: HandoffResult[] = [
   { id: "domain-docs", status: "missing", path: null },
 ];
 
-/** One settings file, as the renderers see it. */
-function artifact(
-  status: ArtifactStatus,
-  allow: string[] | null,
-  plan: MergePlan | null = null,
-  path: string = SETTINGS,
-): SettingsArtifact {
+/** The guidance file, as the renderers see it. */
+function seed(status: ArtifactStatus, path: string = AGENTS_MD): Artifact {
+  return { kind: "agents-md", path, status, contents: status === "skipped" ? null : AGENTS_SEED };
+}
+
+/** The line that points Claude Code at it. */
+function pointer(status: ArtifactStatus): Artifact {
   return {
-    kind: "claude-settings",
-    path,
+    kind: "claude-md",
+    path: CLAUDE_MD,
     status,
-    settings: allow === null ? null : settingsWith(allow),
-    plan,
+    contents: status === "skipped" ? null : CLAUDE_MD_POINTER,
   };
 }
 
-/** The settings file in a rendered outcome. */
-function settingsFile(source: SetupOutcome): SettingsArtifact {
-  return source.artifacts[0] as SettingsArtifact;
-}
+type Fixture = {
+  detected?: ProjectType[];
+  artifacts?: Artifact[];
+  handoff?: HandoffResult[];
+  plugins?: PluginRecommendation[];
+  harnesses?: HarnessPresence[];
+};
 
 /** A fixed outcome, so the renderers are checked without going through detection. */
-function outcome(
-  status: ArtifactStatus,
-  detected: ProjectType[],
-  allow: string[] | null,
-  plan: MergePlan | null = null,
-  handoff: HandoffResult[] = UNTOUCHED,
-  plugins: PluginRecommendation[] = [],
-  which: WhichFn = BOTH_HARNESSES,
-): SetupOutcome {
+function outcome(fixture: Fixture = {}): SetupOutcome {
   // The suggestions come from the real rule rather than a literal, so a
   // rendered fixture always shows a combination a run could actually produce.
-  const base = {
-    root: ROOT,
-    detected,
-    artifacts: [artifact(status, allow, plan)],
-    harnesses: BOTH_PRESENT,
-    plugins,
-    handoff,
-    next: [],
-  };
-  return { ...base, next: nextSteps({ ...base, harnesses: presenceFor(which) }) };
-}
-
-const APPLIED = outcome("applied", ["node"], ["Bash(npm:*)", "Bash(node:*)"]);
-const PLANNED = outcome("planned", ["node", "python"], ["Bash(npm:*)", "Bash(uv:*)"]);
-const SKIPPED = outcome("skipped", ["python"], null);
-const NO_MARKER = outcome("applied", [], []);
-
-const BASELINE = settingsWith(["Edit(./**)", "Bash(npm:*)"]);
-
-/** A merge into a file holding one rule of its own and a mode of its own. */
-const CONFLICTING = planMerge(
-  { permissions: { defaultMode: "plan", allow: ["Bash(terraform:*)"] }, model: "opus" },
-  BASELINE,
-);
-
-/** A merge that only adds rules. */
-const PURE_ADDITION = planMerge({ permissions: { allow: ["Bash(terraform:*)"] } }, BASELINE);
-
-function merging(plan: MergePlan, status: ArtifactStatus = "planned"): SetupOutcome {
   const base: SetupOutcome = {
     root: ROOT,
-    detected: ["node"],
-    artifacts: [
-      { kind: "claude-settings", path: SETTINGS, status, settings: plan.merged, plan },
-    ],
-    harnesses: BOTH_PRESENT,
-    plugins: [],
-    handoff: UNTOUCHED,
+    detected: fixture.detected ?? ["node"],
+    artifacts: fixture.artifacts ?? [seed("applied"), pointer("applied")],
+    harnesses: fixture.harnesses ?? BOTH_HARNESSES,
+    plugins: fixture.plugins ?? [],
+    handoff: fixture.handoff ?? JUST_SEEDED,
     next: [],
   };
   return { ...base, next: nextSteps(base) };
 }
 
+const APPLIED = outcome();
+const PLANNED = outcome({
+  detected: ["node", "python"],
+  artifacts: [seed("planned"), pointer("planned")],
+  handoff: UNTOUCHED,
+});
+const SKIPPED = outcome({
+  detected: ["python"],
+  artifacts: [seed("skipped"), pointer("skipped")],
+  handoff: SETTLED,
+});
+/** A project whose guidance already lives in CLAUDE.md: one file, and nothing to point at it. */
+const IN_CLAUDE_MD = outcome({ artifacts: [seed("skipped", CLAUDE_MD)], handoff: SETTLED });
+const NO_MARKER = outcome({ detected: [] });
+
 function human(input: SetupOutcome): string {
-  return renderSetupHuman({ outcome: input, presets: all() });
+  return renderSetupHuman({ outcome: input });
 }
 
 describe("the human report", () => {
@@ -185,16 +136,12 @@ describe("the human report", () => {
     expect(human(SKIPPED)).toMatchSnapshot();
   });
 
-  test("no marker", () => {
-    expect(human(NO_MARKER)).toMatchSnapshot();
+  test("guidance already in CLAUDE.md", () => {
+    expect(human(IN_CLAUDE_MD)).toMatchSnapshot();
   });
 
-  test("the reason comes before the rules, so the eye lands on why first", () => {
-    const lines = human(APPLIED).split("\n");
-    const reason = lines.findIndex((line) => line.startsWith("Wrote "));
-    const rules = lines.findIndex((line) => line.startsWith("Allowing"));
-    expect(reason).toBeGreaterThan(-1);
-    expect(reason).toBeLessThan(rules);
+  test("no marker", () => {
+    expect(human(NO_MARKER)).toMatchSnapshot();
   });
 
   test("each detected type is shown with the marker that found it", () => {
@@ -206,81 +153,57 @@ describe("the human report", () => {
     expect(human(NO_MARKER)).toContain("package.json, pyproject.toml");
   });
 
-  test("each file gets its own section, in the order it was produced", () => {
-    const two: SetupOutcome = {
-      root: ROOT,
-      detected: ["node"],
-      artifacts: [
-        artifact("applied", ["Bash(npm:*)"]),
-        artifact("declined", ["Bash(npm:*)"], null, "/project/.other/settings.json"),
-      ],
-      harnesses: BOTH_PRESENT,
-      plugins: [],
-      handoff: UNTOUCHED,
-      next: [],
-    };
-    const lines = human(two).split("\n");
-    const first = lines.findIndex((line) => line.startsWith(`Wrote ${SETTINGS}`));
-    const second = lines.findIndex((line) => line.startsWith("Left /project/.other"));
+  test("each file gets its own sentence, in the order it was produced", () => {
+    const lines = human(APPLIED).split("\n");
+    const first = lines.findIndex((line) => line.startsWith(`Wrote ${AGENTS_MD}`));
+    const second = lines.findIndex((line) => line.startsWith(`Wrote ${CLAUDE_MD}`));
     expect(first).toBeGreaterThan(-1);
     expect(second).toBeGreaterThan(first);
     // The handoff still closes the report, however many files came before it.
     expect(lines.findIndex((line) => line.startsWith("Handoff ("))).toBeGreaterThan(second);
   });
-});
 
-describe("the merge diff", () => {
-  test("a merge that only adds rules", () => {
-    expect(human(merging(PURE_ADDITION))).toMatchSnapshot();
+  test("a file's section is a sentence, with no list under it", () => {
+    for (const line of human(APPLIED).split("\n")) {
+      expect(line).not.toMatch(/^(Allowing|Denying|Asking|Enabling|Starting mode)/);
+    }
   });
 
-  test("a merge with a value to decide", () => {
-    expect(human(merging(CONFLICTING))).toMatchSnapshot();
+  test("it says what the pointer is for, so one import line is not a mystery", () => {
+    expect(human(APPLIED)).toContain("so Claude Code reads the guidance in AGENTS.md");
   });
 
-  test("merged", () => {
-    expect(human(merging(PURE_ADDITION, "merged"))).toMatchSnapshot();
+  test("a dry run says nothing was written, for each file", () => {
+    const text = human(PLANNED);
+    expect(text).toContain(`Dry run. Nothing was written to ${AGENTS_MD}.`);
+    expect(text).toContain(`Dry run. Nothing was written to ${CLAUDE_MD}.`);
   });
 
-  test("declined", () => {
-    expect(human(merging(PURE_ADDITION, "declined"))).toMatchSnapshot();
+  test("a file that already stands is named and reported as left alone", () => {
+    const text = human(SKIPPED);
+    expect(text).toContain(`${AGENTS_MD} is already there`);
+    expect(text).toContain(`${CLAUDE_MD} is already there`);
   });
 
-  test("rules the merge adds are marked, and the ones already there are not", () => {
-    const lines = human(merging(PURE_ADDITION)).split("\n");
-    expect(lines).toContain("  + Bash(npm:*)");
-    expect(lines).toContain("    Bash(terraform:*)");
+  test("no permission file is named anywhere, whatever the run did", () => {
+    for (const source of [APPLIED, PLANNED, SKIPPED, IN_CLAUDE_MD, NO_MARKER]) {
+      const text = human(source);
+      expect(text).not.toContain("settings.json");
+      expect(text).not.toContain("config.toml");
+    }
   });
 
-  test("it says nothing has been written yet", () => {
-    expect(human(merging(PURE_ADDITION))).toContain("Nothing has been written yet");
-  });
-
-  test("a conflict shows both sides, and neither is chosen for the person", () => {
-    const text = human(merging(CONFLICTING));
-    expect(text).toContain("To decide (1)");
-    expect(text).toContain("yours: plan");
-    expect(text).toContain("preset: acceptEdits");
-  });
-
-  test("a declined run shows no rules, so nothing reads as though it changed", () => {
-    const text = human(merging(PURE_ADDITION, "declined"));
-    expect(text).toContain("exactly as it was");
-    expect(text).not.toContain("Bash(npm:*)");
-  });
-
-  test("the summary before writing names the file and counts what lands", () => {
-    const text = renderMergeSummary(SETTINGS, PURE_ADDITION.merged);
-    expect(text).toContain(SETTINGS);
-    expect(text).toContain("acceptEdits");
-    expect(text).toContain("3 rules");
-    expect(text).toMatchSnapshot();
+  test("no harness block is shown, whichever harness the machine holds", () => {
+    for (const harnesses of [BOTH_HARNESSES, holding("codex"), holding("claude-code"), NO_HARNESS]) {
+      expect(human(outcome({ harnesses }))).not.toContain("Harnesses (");
+    }
   });
 });
 
 describe("what the harness still owes", () => {
-  const settled = outcome("applied", ["node"], ["Bash(npm:*)"], null, SETTLED);
-  const halfway = outcome("applied", ["node"], ["Bash(npm:*)"], null, HALFWAY);
+  const settled = outcome({ handoff: SETTLED });
+  const halfway = outcome({ handoff: HALFWAY });
+  const untouched = outcome({ handoff: UNTOUCHED });
 
   test("everything settled", () => {
     expect(human(settled)).toMatchSnapshot();
@@ -291,7 +214,7 @@ describe("what the harness still owes", () => {
   });
 
   test("an untouched project is told what to run", () => {
-    const text = human(APPLIED);
+    const text = human(untouched);
     expect(text).toContain("3 still owed");
     expect(text).toContain("/setup-matt-pocock-skills");
   });
@@ -309,19 +232,19 @@ describe("what the harness still owes", () => {
   });
 
   test("a settled item shows the file that answers it", () => {
-    expect(human(halfway)).toContain("\u2713 language       AGENTS.md");
+    expect(human(halfway)).toContain("✓ language       AGENTS.md");
   });
 
   test("it is shown even on a run that wrote nothing", () => {
-    expect(human(merging(PURE_ADDITION, "declined"))).toContain("Handoff (3)");
+    expect(human(SKIPPED)).toContain("Handoff (3)");
   });
 
-  test("it comes last, after the rules", () => {
+  test("it comes after the files", () => {
     const lines = human(APPLIED).split("\n");
-    const rules = lines.findIndex((line) => line.startsWith("Allowing"));
+    const wrote = lines.findIndex((line) => line.startsWith(`Wrote ${CLAUDE_MD}`));
     const owed = lines.findIndex((line) => line.startsWith("Handoff ("));
-    expect(rules).toBeGreaterThan(-1);
-    expect(owed).toBeGreaterThan(rules);
+    expect(wrote).toBeGreaterThan(-1);
+    expect(owed).toBeGreaterThan(wrote);
   });
 });
 
@@ -341,22 +264,13 @@ describe("the JSON report", () => {
       root: ROOT,
       detected: ["node", "python"],
       artifacts: [
-        {
-          kind: "claude-settings",
-          path: SETTINGS,
-          status: "planned",
-          settings: {
-            permissions: {
-              defaultMode: "acceptEdits",
-              deny: ["Read(./.env)"],
-              allow: ["Bash(npm:*)", "Bash(uv:*)"],
-              ask: ["WebFetch"],
-            },
-          },
-          merge: null,
-        },
+        { kind: "agents-md", path: AGENTS_MD, status: "planned", contents: AGENTS_SEED },
+        { kind: "claude-md", path: CLAUDE_MD, status: "planned", contents: CLAUDE_MD_POINTER },
       ],
-      harnesses: BOTH_PRESENT,
+      harnesses: [
+        { id: "claude-code", installed: true },
+        { id: "codex", installed: true },
+      ],
       plugins: [],
       handoff: UNTOUCHED,
       next: [
@@ -366,146 +280,54 @@ describe("the JSON report", () => {
     });
   });
 
-  test("every file is an element, so a consumer walks one list whatever prep produced", () => {
-    const two: SetupOutcome = {
-      root: ROOT,
-      detected: ["node"],
-      artifacts: [
-        artifact("applied", ["Bash(npm:*)"]),
-        artifact("declined", ["Bash(npm:*)"], null, "/project/.other/settings.json"),
-      ],
-      harnesses: BOTH_PRESENT,
-      plugins: [],
-      handoff: UNTOUCHED,
-      next: [],
-    };
-    const payload = JSON.parse(renderSetupJson(two));
-    expect(payload.artifacts.map((one: { path: string }) => one.path)).toEqual([
-      SETTINGS,
-      "/project/.other/settings.json",
+  test("every file is an element, told apart by kind and not by position", () => {
+    const payload = JSON.parse(renderSetupJson(APPLIED));
+    expect(payload.artifacts.map((one: { kind: string }) => one.kind)).toEqual([
+      "agents-md",
+      "claude-md",
     ]);
-    expect(payload.artifacts.map((one: { status: string }) => one.status)).toEqual([
-      "applied",
-      "declined",
-    ]);
+    expect(payload.artifacts.map((one: { path: string }) => one.path)).toEqual([AGENTS_MD, CLAUDE_MD]);
   });
 
-  test("a merge carries the existing file, what it adds, and what is left to decide", () => {
-    const payload = JSON.parse(renderSetupJson(merging(CONFLICTING)));
-    expect(payload.artifacts[0].merge.existing).toEqual({
-      permissions: { defaultMode: "plan", allow: ["Bash(terraform:*)"] },
-      model: "opus",
-    });
-    expect(payload.artifacts[0].merge.added.allow).toEqual(["Edit(./**)", "Bash(npm:*)"]);
-    expect(payload.artifacts[0].merge.conflicts).toEqual([
-      { key: "defaultMode", existing: "plan", preset: "acceptEdits" },
+  test("an artifact carries its kind, path, status and contents, and nothing else", () => {
+    const payload = JSON.parse(renderSetupJson(APPLIED));
+    for (const one of payload.artifacts) {
+      expect(Object.keys(one)).toEqual(["kind", "path", "status", "contents"]);
+    }
+  });
+
+  test("a file prep left alone carries no contents", () => {
+    const payload = JSON.parse(renderSetupJson(SKIPPED));
+    expect(payload.artifacts.map((one: { contents: unknown }) => one.contents)).toEqual([null, null]);
+  });
+
+  test("a harness row says whether the machine holds it, and nothing about files", () => {
+    const payload = JSON.parse(renderSetupJson(outcome({ harnesses: holding("codex") })));
+    expect(payload.harnesses).toEqual([
+      { id: "claude-code", installed: false },
+      { id: "codex", installed: true },
     ]);
-  });
-
-  test("keys prep does not know survive into the reported settings", () => {
-    const payload = JSON.parse(renderSetupJson(merging(CONFLICTING)));
-    expect(payload.artifacts[0].settings.model).toBe("opus");
-  });
-
-  test("the merge report is a copy, so a consumer cannot reach back into the plan", () => {
-    const source = merging(CONFLICTING);
-    const payload = JSON.parse(renderSetupJson(source));
-    payload.artifacts[0].merge.existing.permissions.allow.push("Bash(rm -rf:*)");
-    payload.artifacts[0].merge.conflicts[0].existing = "bypassPermissions";
-    expect(settingsFile(source).plan!.existing).toEqual({
-      permissions: { defaultMode: "plan", allow: ["Bash(terraform:*)"] },
-      model: "opus",
-    });
-    expect(settingsFile(source).plan!.conflicts[0]!.existing).toBe("plan");
   });
 
   test("no human symbols or wording leak in", () => {
-    for (const noise of ["✓", "–", "prep setup ·", "Detected", "Allowing", "Wrote"]) {
-      expect(renderSetupJson(APPLIED)).not.toContain(noise);
+    const text = renderSetupJson(outcome({ handoff: UNTOUCHED }));
+    for (const noise of ["✓", "–", "prep setup ·", "Detected", "Wrote", "still owed"]) {
+      expect(text).not.toContain(noise);
     }
   });
 
   test("the handoff results are copies too", () => {
-    const source = outcome("applied", ["node"], ["Bash(npm:*)"], null, SETTLED);
+    const source = outcome({ handoff: SETTLED });
     const parsed = JSON.parse(renderSetupJson(source));
     parsed.handoff[0].status = "missing";
     expect(source.handoff[0]!.status).toBe("ready");
   });
 
-  test("the arrays are copies, so a consumer cannot reach back into the outcome", () => {
-    const source = outcome("applied", ["node"], ["Bash(npm:*)"]);
-    const parsed = JSON.parse(renderSetupJson(source));
-    parsed.artifacts[0].settings.permissions.allow.push("Bash(rm -rf:*)");
-    expect(settingsFile(source).settings!.permissions.allow).toEqual(["Bash(npm:*)"]);
-  });
-});
-
-describe("the guidance file", () => {
-  /** What a seeded project's language item reads as: the file is there, the section is not. */
-  const JUST_SEEDED: HandoffResult[] = [
-    { id: "language", status: "empty", path: "AGENTS.md" },
-    { id: "issue-tracker", status: "missing", path: null },
-    { id: "domain-docs", status: "missing", path: null },
-  ];
-
-  /** A run that produced both files: the settings block, then the seed. */
-  function withSeed(
-    status: ArtifactStatus,
-    path = AGENTS_MD,
-    handoff = status === "applied" ? JUST_SEEDED : UNTOUCHED,
-  ): SetupOutcome {
-    const base: SetupOutcome = {
-      root: ROOT,
-      detected: ["node"],
-      artifacts: [
-        artifact("applied", ["Bash(npm:*)"]),
-        { kind: "agents-md", path, status, contents: status === "skipped" ? null : AGENTS_SEED },
-      ],
-      harnesses: BOTH_PRESENT,
-      plugins: [],
-      handoff,
-      next: [],
-    };
-    return { ...base, next: nextSteps(base) };
-  }
-
-  test("written", () => {
-    expect(human(withSeed("applied"))).toMatchSnapshot();
-  });
-
-  test("planned", () => {
-    expect(human(withSeed("planned"))).toMatchSnapshot();
-  });
-
-  test("already there", () => {
-    expect(human(withSeed("skipped", "/project/CLAUDE.md"))).toMatchSnapshot();
-  });
-
-  test("its section holds a sentence and no rule list", () => {
-    const lines = human(withSeed("applied")).split("\n");
-    const seeded = lines.findIndex((line) => line.includes(AGENTS_MD));
-    expect(seeded).toBeGreaterThan(-1);
-    // Everything after it is the handoff block. No permission heading rides along.
-    for (const line of lines.slice(seeded)) expect(line).not.toMatch(/^(Allowing|Denying|Asking)/);
-  });
-
-  test("a skipped seed names the file that already stands there", () => {
-    expect(human(withSeed("skipped", "/project/CLAUDE.md"))).toContain("/project/CLAUDE.md is already there");
-  });
-
-  test("JSON carries the contents and no settings fields", () => {
-    const payload = JSON.parse(renderSetupJson(withSeed("applied")));
-    expect(payload.artifacts[1]).toEqual({
-      kind: "agents-md",
-      path: AGENTS_MD,
-      status: "applied",
-      contents: AGENTS_SEED,
-    });
-  });
-
-  test("a skipped seed carries no contents", () => {
-    const payload = JSON.parse(renderSetupJson(withSeed("skipped")));
-    expect(payload.artifacts[1].contents).toBeNull();
+  test("the harness rows are copies, so a consumer cannot reach back into the outcome", () => {
+    const source = outcome({ harnesses: holding("claude-code") });
+    const payload = JSON.parse(renderSetupJson(source));
+    payload.harnesses[0].installed = false;
+    expect(source.harnesses[0]!.installed).toBe(true);
   });
 });
 
@@ -530,7 +352,7 @@ describe("the plugins a project type calls for", () => {
   }
 
   function withPlugins(...plugins: PluginRecommendation[]): SetupOutcome {
-    return outcome("applied", ["node"], ["Bash(npm:*)"], null, UNTOUCHED, plugins);
+    return outcome({ plugins });
   }
 
   const MISSING = withPlugins(recommended("missing"));
@@ -552,15 +374,21 @@ describe("the plugins a project type calls for", () => {
     expect(text).toContain(`claude plugin install ${TYPESCRIPT}`);
   });
 
-  test("a plugin already on the machine says prep is the one turning it on", () => {
+  test("a plugin already on the machine is reported with the command that turns it on here", () => {
     const text = human(INSTALLED);
-    expect(text).toContain("prep turns it on here");
+    expect(text).toContain(`claude plugin enable ${TYPESCRIPT} --scope project`);
     expect(text).not.toContain("claude plugin install");
+  });
+
+  test("nothing claims prep turned a plugin on — the command is the person's to run", () => {
+    for (const source of [MISSING, INSTALLED, BOTH]) {
+      expect(human(source)).not.toContain("prep turns it on");
+    }
   });
 
   test("each status reads differently, so two of them never blur together", () => {
     const text = human(BOTH);
-    expect(text).toContain("+ typescript-lsp  installed on this machine");
+    expect(text).toContain("+ typescript-lsp  installed, not turned on here");
     expect(text).toContain("✗ pyright-lsp     not installed");
   });
 
@@ -570,12 +398,18 @@ describe("the plugins a project type calls for", () => {
   });
 
   test("a project with no recognised type is recommended nothing, and shown nothing", () => {
-    expect(human(outcome("applied", [], []))).not.toContain("Plugins (");
+    expect(human(NO_MARKER)).not.toContain("Plugins (");
+  });
+
+  test("the block is shown whether or not Claude Code is on the machine", () => {
+    for (const harnesses of [NO_HARNESS, holding("codex")]) {
+      expect(human(outcome({ plugins: [recommended("missing")], harnesses }))).toContain("Plugins (1)");
+    }
   });
 
   test("it sits between the files and what the harness owes", () => {
     const lines = human(MISSING).split("\n");
-    const wrote = lines.findIndex((line) => line.startsWith("Wrote "));
+    const wrote = lines.findIndex((line) => line.startsWith(`Wrote ${CLAUDE_MD}`));
     const block = lines.findIndex((line) => line.startsWith("Plugins ("));
     const owed = lines.findIndex((line) => line.startsWith("Handoff ("));
     expect(wrote).toBeGreaterThan(-1);
@@ -599,7 +433,7 @@ describe("the plugins a project type calls for", () => {
         server: { binary: "pyright-lsp-server", status: "installed" },
       },
     ]);
-    for (const noise of ["claude plugin install", "prep turns it on", "not installed", "✗"]) {
+    for (const noise of ["claude plugin install", "claude plugin enable", "not installed", "✗"]) {
       expect(renderSetupJson(BOTH)).not.toContain(noise);
     }
   });
@@ -667,95 +501,6 @@ describe("the plugins a project type calls for", () => {
   });
 });
 
-describe("turning an installed plugin on", () => {
-  const TYPESCRIPT = "typescript-lsp@claude-plugins-official";
-  const PYRIGHT = "pyright-lsp@claude-plugins-official";
-
-  /** The baseline as it stands once a plugin has been folded into it. */
-  const ENABLING: ClaudeSettings = {
-    ...settingsWith(["Bash(npm:*)"]),
-    enabledPlugins: { [TYPESCRIPT]: true },
-  };
-
-  function enablingOutcome(plan: MergePlan | null, status: ArtifactStatus = "applied"): SetupOutcome {
-    const settings = plan === null ? ENABLING : plan.merged;
-    const base: SetupOutcome = {
-      root: ROOT,
-      detected: ["node"],
-      artifacts: [{ kind: "claude-settings", path: SETTINGS, status, settings, plan }],
-      harnesses: BOTH_PRESENT,
-      plugins: [
-        {
-          name: "typescript-lsp",
-          marketplace: "claude-plugins-official",
-          status: "installed",
-          server: { binary: "typescript-language-server", status: "installed" },
-        },
-      ],
-      handoff: UNTOUCHED,
-      next: [],
-    };
-    return { ...base, next: nextSteps(base) };
-  }
-
-  test("written into a fresh file", () => {
-    expect(human(enablingOutcome(null))).toMatchSnapshot();
-  });
-
-  test("added to a file that already lists another", () => {
-    const plan = planMerge({ enabledPlugins: { [PYRIGHT]: true } }, ENABLING);
-    expect(human(enablingOutcome(plan, "planned"))).toMatchSnapshot();
-  });
-
-  test("the entry is listed under its own heading, beside the rules", () => {
-    const text = human(enablingOutcome(null));
-    expect(text).toContain("Enabling (1)");
-    expect(text).toContain(TYPESCRIPT);
-  });
-
-  test("a merge marks the entry it adds and leaves the one already there unmarked", () => {
-    const plan = planMerge({ enabledPlugins: { [PYRIGHT]: true } }, ENABLING);
-    const lines = human(enablingOutcome(plan, "planned")).split("\n");
-    expect(lines).toContain(`  + ${TYPESCRIPT}`);
-    expect(lines).toContain(`    ${PYRIGHT}`);
-  });
-
-  test("an entry somebody switched off is shown as switched off, not quietly dropped", () => {
-    const plan = planMerge({ enabledPlugins: { [PYRIGHT]: false } }, ENABLING);
-    expect(human(enablingOutcome(plan, "planned"))).toContain(`${PYRIGHT} (off)`);
-  });
-
-  test("a file with nothing to turn on grows no heading", () => {
-    expect(human(APPLIED)).not.toContain("Enabling (");
-  });
-
-  test("the one-line summary says a plugin is being turned on, not only how many rules land", () => {
-    const plan = planMerge({ enabledPlugins: { [PYRIGHT]: true } }, ENABLING);
-    expect(human(enablingOutcome(plan, "planned"))).toContain("adds 3 rules and turns on 1 plugin");
-  });
-
-  test("the summary before writing counts every plugin the file will hold, not only the new one", () => {
-    const plan = planMerge({ enabledPlugins: { [PYRIGHT]: true } }, ENABLING);
-    const text = renderMergeSummary(SETTINGS, plan.merged);
-    expect(text).toContain("Enabling       2 plugins");
-    expect(text).toMatchSnapshot();
-  });
-
-  test("a merge that turns nothing on shows no plugin line", () => {
-    expect(renderMergeSummary(SETTINGS, PURE_ADDITION.merged)).not.toContain("Enabling");
-  });
-
-  test("JSON reports the entries the merge adds", () => {
-    const plan = planMerge({ enabledPlugins: { [PYRIGHT]: true } }, ENABLING);
-    const payload = JSON.parse(renderSetupJson(enablingOutcome(plan, "planned")));
-    expect(payload.artifacts[0].merge.addedPlugins).toEqual([TYPESCRIPT]);
-    expect(payload.artifacts[0].settings.enabledPlugins).toEqual({
-      [PYRIGHT]: true,
-      [TYPESCRIPT]: true,
-    });
-  });
-});
-
 describe("what to run next", () => {
   test("the commands come last, after what is owed", () => {
     const lines = human(APPLIED).split("\n");
@@ -774,14 +519,13 @@ describe("what to run next", () => {
   });
 
   test("a run with nothing project-side to do still shows the machine step", () => {
-    const settled = outcome("skipped", ["node"], null, null, SETTLED);
-    expect(settled.next.map((step) => step.id)).toEqual(["chef"]);
-    expect(human(settled)).toContain("Next (1)");
+    expect(SKIPPED.next.map((step) => step.id)).toEqual(["chef"]);
+    expect(human(SKIPPED)).toContain("Next (1)");
   });
 
-  test("the owed line no longer carries the command — the block does", () => {
+  test("the owed line does not carry the command — the block does", () => {
     const text = human(APPLIED);
-    expect(text).toContain("3 still owed.");
+    expect(text).toContain("2 still owed.");
     expect(text.indexOf(CLAUDE_COMMAND)).toBeGreaterThan(text.indexOf("Next ("));
   });
 
@@ -795,7 +539,7 @@ describe("what to run next", () => {
   });
 
   test("with no harness on the machine the block sends the person to install one", () => {
-    const text = human(outcome("applied", ["node"], ["Bash(npm:*)"], null, UNTOUCHED, [], NO_HARNESS));
+    const text = human(outcome({ harnesses: NO_HARNESS }));
     expect(text).toMatch(/prep chef +no agent CLI here — install one first/);
     // Nothing to paste at a harness that is not there.
     expect(text).not.toContain(CLAUDE_COMMAND);
@@ -803,8 +547,11 @@ describe("what to run next", () => {
     expect(text).toContain("Next (1)");
   });
 
-  test("a merge nobody could answer points back at the same run", () => {
-    expect(human(merging(PURE_ADDITION))).toContain(`prep setup ${ROOT}`);
+  test("no step points back at prep setup — nothing is left waiting on an answer", () => {
+    for (const source of [APPLIED, PLANNED, SKIPPED]) {
+      const block = human(source).split("Next (")[1]!;
+      expect(block).not.toContain("prep setup");
+    }
   });
 
   test("JSON carries ids and commands, and no wording", () => {
@@ -813,14 +560,13 @@ describe("what to run next", () => {
       { id: "harness", command: CLAUDE_COMMAND, alternative: CODEX_COMMAND },
       { id: "chef", command: "prep chef", alternative: null },
     ]);
-    for (const noise of ["writes the guidance", "checks this machine"]) {
+    for (const noise of ["writes the guidance", "reports what this machine"]) {
       expect(renderSetupJson(APPLIED)).not.toContain(noise);
     }
   });
 
   test("JSON says so plainly when there is only one way to do the step", () => {
-    const source = outcome("applied", ["node"], ["Bash(npm:*)"], null, UNTOUCHED, [], holding("codex"));
-    const payload = JSON.parse(renderSetupJson(source));
+    const payload = JSON.parse(renderSetupJson(outcome({ harnesses: holding("codex") })));
     expect(payload.next[0]).toEqual({
       id: "harness",
       command: CODEX_COMMAND,
@@ -829,205 +575,9 @@ describe("what to run next", () => {
   });
 
   test("the steps are copies, so a consumer cannot reach back into the outcome", () => {
-    const source = outcome("applied", ["node"], ["Bash(npm:*)"]);
+    const source = outcome();
     const parsed = JSON.parse(renderSetupJson(source));
     parsed.next[0].command = "rm -rf /";
     expect(source.next[0]!.command).toBe(CLAUDE_COMMAND);
-  });
-});
-
-describe("the Codex permission file", () => {
-  const CODEX_CONFIG = "/project/.codex/config.toml";
-
-  const PROFILE: CodexConfig = {
-    profile: "project-edit",
-    extends: ":workspace",
-    approvalPolicy: "on-request",
-    workspace: [".env", "**/*.pem"],
-    outside: ["~/.ssh"],
-  };
-
-  /** A run that wrote for both harnesses: the Claude file, then the Codex one. */
-  function withCodex(status: ArtifactStatus, sandboxMode = false): SetupOutcome {
-    const base: SetupOutcome = {
-      root: ROOT,
-      detected: ["node"],
-      artifacts: [
-        artifact("applied", ["Bash(npm:*)"]),
-        {
-          kind: "codex-config",
-          path: CODEX_CONFIG,
-          status,
-          config: status === "skipped" ? null : PROFILE,
-          sandboxMode,
-        },
-      ],
-      harnesses: BOTH_PRESENT,
-      plugins: [],
-      handoff: UNTOUCHED,
-      next: [],
-    };
-    return { ...base, next: nextSteps(base) };
-  }
-
-  test("written", () => {
-    expect(human(withCodex("applied"))).toMatchSnapshot();
-  });
-
-  test("already there, with a sandbox mode in it", () => {
-    expect(human(withCodex("skipped", true))).toMatchSnapshot();
-  });
-
-  test("every denied path is shown, whichever side of the project it is on", () => {
-    const text = human(withCodex("applied"));
-    expect(text).toContain("Denying (3)");
-    expect(text).toContain("**/*.pem");
-    expect(text).toContain("~/.ssh");
-  });
-
-  test("the profile it starts from is named, the way the Claude file names its mode", () => {
-    expect(human(withCodex("applied"))).toContain(":workspace, approval on-request");
-  });
-
-  test("an existing file is reported as left alone, and none of its paths is listed", () => {
-    const text = human(withCodex("skipped"));
-    expect(text).toContain("does not merge TOML");
-    // The paths prep would have written say nothing about a file it did not write.
-    expect(text).not.toContain("~/.ssh");
-    expect(text).not.toContain(":workspace");
-  });
-
-  test("a sandbox mode is called out, because it turns the whole profile off", () => {
-    expect(human(withCodex("skipped", true))).toContain("sandbox_mode");
-  });
-
-  test("a file prep wrote itself says nothing about sandbox modes", () => {
-    expect(human(withCodex("applied"))).not.toContain("sandbox_mode");
-  });
-
-  test("JSON carries the profile and the sandbox fact, and no sentence", () => {
-    const payload = JSON.parse(renderSetupJson(withCodex("applied")));
-    expect(payload.artifacts[1]).toEqual({
-      kind: "codex-config",
-      path: CODEX_CONFIG,
-      status: "applied",
-      config: PROFILE,
-      sandboxMode: false,
-    });
-  });
-
-  test("the profile is a copy, so a consumer cannot reach back into the outcome", () => {
-    const source = withCodex("applied");
-    const payload = JSON.parse(renderSetupJson(source));
-    payload.artifacts[1].config.workspace.push("secrets");
-    expect(PROFILE.workspace).toEqual([".env", "**/*.pem"]);
-  });
-});
-
-describe("the file that points Claude Code at the guidance", () => {
-  const POINTER = "/project/CLAUDE.md";
-
-  function withPointer(status: ArtifactStatus): SetupOutcome {
-    const base: SetupOutcome = {
-      root: ROOT,
-      detected: ["node"],
-      artifacts: [
-        artifact("applied", ["Bash(npm:*)"]),
-        { kind: "agents-md", path: AGENTS_MD, status: "applied", contents: AGENTS_SEED },
-        { kind: "claude-md", path: POINTER, status, contents: status === "skipped" ? null : "@AGENTS.md\n" },
-      ],
-      harnesses: BOTH_PRESENT,
-      plugins: [],
-      handoff: UNTOUCHED,
-      next: [],
-    };
-    return { ...base, next: nextSteps(base) };
-  }
-
-  test("written", () => {
-    expect(human(withPointer("applied"))).toMatchSnapshot();
-  });
-
-  test("it says what the file is for, so one import line is not a mystery", () => {
-    expect(human(withPointer("applied"))).toContain("so Claude Code reads the guidance in AGENTS.md");
-  });
-
-  test("an existing CLAUDE.md is reported as left alone", () => {
-    expect(human(withPointer("skipped"))).toContain(`${POINTER} is already there`);
-  });
-
-  test("it comes after the file it points at", () => {
-    const lines = human(withPointer("applied")).split("\n");
-    expect(lines.findIndex((line) => line.includes(POINTER))).toBeGreaterThan(
-      lines.findIndex((line) => line.includes(AGENTS_MD)),
-    );
-  });
-
-  test("JSON tells the two files apart by kind, not by path", () => {
-    const payload = JSON.parse(renderSetupJson(withPointer("applied")));
-    expect(payload.artifacts.map((one: { kind: string }) => one.kind)).toEqual([
-      "claude-settings",
-      "agents-md",
-      "claude-md",
-    ]);
-  });
-});
-
-describe("which harness the run wrote for", () => {
-  function withHarnesses(rows: HarnessPresence[]): SetupOutcome {
-    const base: SetupOutcome = {
-      root: ROOT,
-      detected: ["node"],
-      artifacts: [artifact("applied", ["Bash(npm:*)"])],
-      harnesses: rows,
-      plugins: [],
-      handoff: UNTOUCHED,
-      next: [],
-    };
-    return { ...base, next: nextSteps(base) };
-  }
-
-  const CLAUDE_ONLY: HarnessPresence[] = [
-    { id: "claude-code", installed: true, covered: true },
-    { id: "codex", installed: false, covered: false },
-  ];
-
-  const NEITHER: HarnessPresence[] = [
-    { id: "claude-code", installed: false, covered: true },
-    { id: "codex", installed: false, covered: false },
-  ];
-
-  test("one harness missing", () => {
-    expect(human(withHarnesses(CLAUDE_ONLY))).toMatchSnapshot();
-  });
-
-  test("no harness at all", () => {
-    expect(human(withHarnesses(NEITHER))).toMatchSnapshot();
-  });
-
-  test("with both installed the block is left out — the file list is the whole answer", () => {
-    expect(human(APPLIED)).not.toContain("Harnesses (");
-  });
-
-  test("a harness that is not here is told apart from one whose files were skipped", () => {
-    const text = human(withHarnesses(CLAUDE_ONLY));
-    expect(text).toContain("✗ codex");
-    expect(text).toContain("its files are left out");
-  });
-
-  test("a fallback run says the files were written for a harness that is not here", () => {
-    expect(human(withHarnesses(NEITHER))).toContain("written for anyway");
-  });
-
-  test("JSON carries the rows as facts, with no wording", () => {
-    const payload = JSON.parse(renderSetupJson(withHarnesses(CLAUDE_ONLY)));
-    expect(payload.harnesses).toEqual(CLAUDE_ONLY);
-  });
-
-  test("the rows are copies, so a consumer cannot reach back into the outcome", () => {
-    const source = withHarnesses(CLAUDE_ONLY);
-    const payload = JSON.parse(renderSetupJson(source));
-    payload.harnesses[0].installed = false;
-    expect(source.harnesses[0]!.installed).toBe(true);
   });
 });

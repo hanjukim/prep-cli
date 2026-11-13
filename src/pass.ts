@@ -16,7 +16,7 @@ import type {
  * This is the one module in prep that starts a process, and the narrowing of
  * "prep starts no process on any path" is argued in docs/adr/0026: no file
  * answers a login question honestly, and the token files that would come close
- * are exactly the paths prep's own presets deny. Every spawn here takes a fixed
+ * are secrets prep has no business opening. Every spawn here takes a fixed
  * argv from the registry, runs without a shell, and has its output thrown away
  * unread — an account name printed by `gh auth status` never exists in this
  * process as data.

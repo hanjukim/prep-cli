@@ -1,37 +1,16 @@
 #!/usr/bin/env bun
 
 import { HandoffError, checkHandoff } from "./handoff.ts";
-import { resolveConflicts } from "./merge.ts";
-import { awaitsApproval, nextSteps } from "./next.ts";
 import { runPass, spawnCheck, withProgress } from "./pass.ts";
 import { UnsupportedPlatformError, detectPlatform } from "./platform.ts";
-import { all as allPresets } from "./presets.ts";
 import { bunWhich, checkAll } from "./probe.ts";
-import { isInteractive, terminalPrompt } from "./prompt.ts";
 import { all, passItems } from "./registry.ts";
 import { renderHuman } from "./report/human.ts";
 import { renderJson } from "./report/json.ts";
-import { renderMergeSummary, renderSetupHuman } from "./report/setup-human.ts";
+import { renderSetupHuman } from "./report/setup-human.ts";
 import { renderSetupJson } from "./report/setup-json.ts";
-import {
-  SetupError,
-  nodeFs,
-  requireDirectory,
-  setup as runSetup,
-  writeSettings,
-} from "./setup.ts";
-import type {
-  Artifact,
-  CheckFn,
-  ConflictSide,
-  ChefProject,
-  MergePlan,
-  SettingsArtifact,
-  SetupFs,
-  SetupOutcome,
-  SetupPrompt,
-  WhichFn,
-} from "./types.ts";
+import { SetupError, nodeFs, requireDirectory, setup as runSetup } from "./setup.ts";
+import type { CheckFn, ChefProject, SetupFs, SetupOutcome, WhichFn } from "./types.ts";
 
 export type RunDeps = {
   /** A platform string used instead of detection. Lets tests cover macOS and Linux without either machine. */
@@ -48,8 +27,7 @@ export type RunDeps = {
   check?: CheckFn;
   /**
    * Where a slow pass check names itself. Handed in only when a stream is a
-   * terminal — the same way `prompt` arrives only when there is one to ask
-   * through — so `run` itself never reads process state.
+   * terminal, so `run` itself never reads process state.
    */
   progress?: (text: string) => void;
   /**
@@ -66,8 +44,6 @@ export type RunDeps = {
    * fallback — it never guesses which project it is in (docs/adr/0027).
    */
   cwd?: string;
-  /** How the person is asked about a merge. Absent means nobody is there to ask. */
-  prompt?: SetupPrompt;
 };
 
 export type RunResult = { stdout: string; stderr: string; exitCode: number };
@@ -91,12 +67,10 @@ const USAGE = [
   "            Given a path, it reads that project as well: whether the directory is a git",
   "            repository, and what the agent CLI still owes it. With no path it reads the",
   "            machine alone — chef never guesses which project you are in.",
-  "  setup     Write the project type's Bash allowlist as permission files, one per agent CLI",
-  "            installed here: .claude/settings.json for Claude Code, .codex/config.toml for Codex.",
-  "            Seed AGENTS.md where no guidance file exists yet, and point Claude Code at it.",
-  "            An existing settings file is merged into — never overwritten — after you approve",
-  "            the diff. Any other existing file is left exactly as it is.",
-  "            The type's language server plugin is named; one already installed is turned on.",
+  "  setup     Seed AGENTS.md where no guidance file exists yet, and write the one-line CLAUDE.md",
+  "            that points Claude Code at it. An existing file is left exactly as it is.",
+  "            The project type's language server plugin is named, with the command that installs",
+  "            it or turns it on. prep writes no permission or settings file and asks no question.",
   "",
   "  --json      Print the report as is, instead of the human wording.",
   "  --dry-run   setup only. Show what would be written without writing it.",
@@ -247,75 +221,17 @@ async function chef(deps: RunDeps, options: ChefOptions): Promise<RunResult> {
 type SetupOptions = { path?: string; dryRun: boolean; json: boolean };
 
 /**
- * Asks about one file, and writes it if the answer is yes.
- *
- * Each conflicting value is settled one at a time, and the final summary names
- * the file about to change. Refusing leaves that file byte for byte as it was,
- * and says nothing about any other file in the run.
- */
-function confirmMerge(
-  artifact: SettingsArtifact & { plan: MergePlan },
-  prompt: SetupPrompt,
-  deps: RunDeps,
-): Artifact {
-  const plan = artifact.plan;
-
-  const sides: Record<string, ConflictSide> = {};
-  for (const conflict of plan.conflicts) sides[conflict.key] = prompt.choose(conflict);
-
-  const settings = resolveConflicts(plan, sides);
-  prompt.show("\n" + renderMergeSummary(artifact.path, settings));
-
-  if (!prompt.confirm("Apply this merge?")) {
-    return { ...artifact, status: "declined", settings };
-  }
-
-  writeSettings(artifact.path, settings, deps.fs);
-
-  return { ...artifact, status: "merged", settings };
-}
-
-/**
- * Shows the whole run, then takes each waiting file through its own approval.
- *
- * The diff goes up once and covers every file, because that is what a person
- * needs in front of them before the first question. The questions themselves go
- * file by file: declining one must not decide anything about the next.
- */
-export function approve(outcome: SetupOutcome, prompt: SetupPrompt, deps: RunDeps): SetupOutcome {
-  if (!outcome.artifacts.some(awaitsApproval)) return outcome;
-
-  prompt.show(renderSetupHuman({ outcome, presets: allPresets() }));
-
-  const answered = {
-    ...outcome,
-    artifacts: outcome.artifacts.map((artifact) =>
-      awaitsApproval(artifact) ? confirmMerge(artifact, prompt, deps) : artifact,
-    ),
-  };
-
-  // The suggestions are read off the outcome, so they are read again once the
-  // answers are in: a merge that has just been approved is nothing to go back
-  // and approve, and one that was refused is not either.
-  return { ...answered, next: nextSteps(answered) };
-}
-
-/**
  * What a setup run exits on, read off the files it produced.
  *
  * Writing nothing is a normal observation, not a failure — the same split
  * chef draws between gaps and errors. A dry run is the exception: it was
  * asked for a plan and it produced one, so it succeeded.
  *
- * With several files, one written file is enough for 0. A run that wrote one
- * and was refused another did part of what it came for, and the refusal is
- * already in the report; failing the whole run over it would put an error in
- * front of somebody who answered every question deliberately.
+ * With several files, one written file is enough for 0: a run that wrote one
+ * and found the other already standing did what there was to do.
  */
 export function setupExitCode(outcome: SetupOutcome, dryRun: boolean): number {
-  const wrote = outcome.artifacts.some(
-    (artifact) => artifact.status === "applied" || artifact.status === "merged",
-  );
+  const wrote = outcome.artifacts.some((artifact) => artifact.status === "applied");
   const asked = dryRun && outcome.artifacts.some((artifact) => artifact.status === "planned");
 
   return wrote || asked ? EXIT_OK : EXIT_OBSERVED;
@@ -333,13 +249,6 @@ function setup(deps: RunDeps, options: SetupOptions): RunResult {
       home: deps.home,
       which: deps.which,
     });
-
-    // A merge is only written after somebody has seen it. Under --json, under
-    // --dry-run, or with nobody on the other end, the plan is reported and the
-    // file is left alone — a run reading from a pipe must never stop on a
-    // question, and must never answer one on the person's behalf.
-    const askable = !options.dryRun && !options.json && deps.prompt !== undefined;
-    if (askable) outcome = approve(outcome, deps.prompt!, deps);
   } catch (error) {
     if (error instanceof SetupError) {
       // Errors stay plain text on stderr even under --json, the same as chef.
@@ -349,9 +258,7 @@ function setup(deps: RunDeps, options: SetupOptions): RunResult {
     throw error;
   }
 
-  const stdout = options.json
-    ? renderSetupJson(outcome)
-    : renderSetupHuman({ outcome, presets: allPresets() });
+  const stdout = options.json ? renderSetupJson(outcome) : renderSetupHuman({ outcome });
 
   return { stdout, stderr: "", exitCode: setupExitCode(outcome, options.dryRun) };
 }
@@ -359,12 +266,10 @@ function setup(deps: RunDeps, options: SetupOptions): RunResult {
 export async function main(argv: readonly string[] = Bun.argv.slice(2)): Promise<never> {
   let result: RunResult;
   try {
-    // The prompt is handed in only when there is a terminal to ask through.
     // Progress rides the bootstrap script's own condition ([ -t 1 ] || [ -t 2 ])
     // and goes to stderr, since stdout is the report.
     const terminal = process.stdout.isTTY === true || process.stderr.isTTY === true;
     result = await run(argv, {
-      prompt: isInteractive() ? terminalPrompt : undefined,
       progress: terminal ? (text) => process.stderr.write(text) : undefined,
     });
   } catch (error) {

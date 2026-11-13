@@ -1,44 +1,18 @@
 import { harnesses } from "./registry.ts";
-import type {
-  Artifact,
-  HandoffResult,
-  HarnessPresence,
-  MergePlan,
-  NextStep,
-  SettingsArtifact,
-  SetupOutcome,
-} from "./types.ts";
+import type { HandoffResult, HarnessPresence, NextStep, SetupOutcome } from "./types.ts";
 
 /**
  * What to run after setup has had its say.
  *
  * The report already tells a person what happened. This tells them what to do
  * with it, in the same intervention level chef holds to: a verified command,
- * shown, never run (docs/adr/0002). prep executes none of these.
+ * shown, never run (docs/adr/0010). prep executes none of these.
  *
  * Each project-side step is here because something in the outcome asked for
  * it. The machine check is the exception: what a machine still owes a person
  * does not depend on what this run did, so it is offered on every run that
  * reaches the end.
  */
-
-/**
- * Whether a file is still waiting on a person before it can land.
- *
- * Only a merge waits. A file prep writes where none existed takes nothing away
- * from anybody, so there is no question to hold it up.
- *
- * Exported because two callers ask it of the same artifact and must not drift:
- * the approval loop, which asks so it can put the question, and this module,
- * which asks so it can say the question is still open.
- */
-export function awaitsApproval(
-  artifact: Artifact,
-): artifact is SettingsArtifact & { plan: MergePlan } {
-  return (
-    artifact.kind === "claude-settings" && artifact.status === "planned" && artifact.plan !== null
-  );
-}
 
 function owed(handoff: readonly HandoffResult[]): boolean {
   return handoff.some((result) => result.status !== "ready");
@@ -52,9 +26,8 @@ const CHEF = "prep chef";
  *
  * A command is only worth pasting if the binary it starts is there, so the
  * suggestion is limited to the harnesses this machine holds. Those were already
- * read once, when the run decided which files to write — reading PATH a second
- * time here would let the footer and the file list disagree about the same
- * machine.
+ * read once, by the run itself — reading PATH a second time here would let the
+ * footer and the rest of the report disagree about the same machine.
  *
  * With both installed prep names the first and keeps the second as the
  * alternative: which harness somebody works in is not prep's to decide, and
@@ -84,9 +57,8 @@ function harnessStep(present: readonly HarnessPresence[]): NextStep {
 /**
  * Reads the steps off the outcome, in the order they are worth doing.
  *
- * Approval first: it is the only one that finishes work this run started and
- * left unfinished. The harness comes next, since it is what the project is
- * missing. The machine check comes last — it is a different scope, and it is
+ * The harness comes first, since it is what the project is missing. The
+ * machine check comes last — it is a different scope, and it is
  * on every run: whether this run wrote a file says nothing about whether the
  * machine's logins and identity are settled, and a dry run is exactly the run
  * somebody uses to look before touching anything.
@@ -96,12 +68,6 @@ function harnessStep(present: readonly HarnessPresence[]): NextStep {
  */
 export function nextSteps(outcome: SetupOutcome): NextStep[] {
   const steps: NextStep[] = [];
-
-  // A plan nobody approved is not an observation to sit on. It is the same run,
-  // stopped one question short, and the question needs a terminal.
-  if (outcome.artifacts.some(awaitsApproval)) {
-    steps.push({ id: "approve", command: `prep setup ${outcome.root}`, alternative: null });
-  }
 
   if (owed(outcome.handoff)) steps.push(harnessStep(outcome.harnesses));
 
