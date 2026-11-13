@@ -1,4 +1,4 @@
-import { isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path/posix";
 
 import type {
   InstallScope,
