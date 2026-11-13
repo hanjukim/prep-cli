@@ -1,7 +1,7 @@
 {
   "name": "prep-cli",
   "version": "0.1.0-beta.0",
-  "description": "Security-first, deny-by-default project and machine setup CLI for coding agents.",
+  "description": "Project and machine setup CLI for coding agents: it reads, reports, and seeds the guidance file.",
   "license": "MIT",
   "author": "Hanju Kim",
   "type": "module",

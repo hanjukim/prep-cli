@@ -1,7 +1,9 @@
 # ADR-0002: The preset is static data, and prep-cli calls no agent at runtime
 
 **Date:** 2026-08-01
-**Status:** Accepted
+**Status:** Accepted — narrowed by ADR-0031: prep writes no permission file, so
+there is no preset left. What this record decided — tables are static data, and
+no agent is called at run time — stands for the plugin table.
 **Sources:** wayfinder map "project security bootstrap design" (#14), grilling
 on tickets #8/#16/#17/#18
 

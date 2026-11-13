@@ -27,7 +27,7 @@
 # the destination's own installer knows about (docs/adr/0017):
 #
 #   - Claude Code is a link rather than a gap, because without a harness there
-#     is nobody to read the permission files `prep setup` writes
+#     is nobody to hand the project `prep setup` seeded to
 #     (docs/adr/0013). Codex is not in the chain — chef names it and a person
 #     installs it.
 #   - Node is a link, because the vendor's installer lays down a `claude` that
@@ -1270,9 +1270,8 @@ fi
 step "10/10 prep setup"
 
 if [ "$PROJECT_READY" -eq 1 ]; then
-  # Exit 1 means it wrote nothing, which its own report explains — a merge
-  # waiting for approval, or a project already covered. Only a tool error stops
-  # the run.
+  # Exit 1 means it wrote nothing, which its own report explains — a project
+  # whose guidance files already stand. Only a tool error stops the run.
   setup_status=0
   prep setup "$PROJECT_DIR" || setup_status=$?
   [ "$setup_status" -ne 2 ] || fail "prep setup could not finish. The message above says why."

@@ -1,7 +1,7 @@
 # ADR-0006: The deny list also closes irreversible commands
 
 **Date:** 2026-08-01
-**Status:** Accepted
+**Status:** Superseded — replaced by ADR-0031 (prep writes no deny list).
 **Sources:** ticket #37. The data goes in with follow-up ticket #38.
 
 ## Context

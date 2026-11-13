@@ -1,7 +1,9 @@
 # ADR-0003: prep reads existing settings and merges them with human approval
 
 **Date:** 2026-08-01
-**Status:** Accepted
+**Status:** Superseded — replaced by ADR-0031 (prep writes no settings file, so
+there is nothing to merge and nothing to approve). The file is still read, for
+one key.
 **Sources:** tickets #23 and #24, and #17 "decide the preset apply/merge
 algorithm", which was left unanswered
 

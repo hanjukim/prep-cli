@@ -5,7 +5,7 @@ prep exists on their machine. The script sits outside prep on purpose
 (docs/adr/0009): it shares no code with anything prep exports, and it is the
 only part of this repository somebody meets before installing anything.
 
-prep's own vocabulary — `preset`, `gap`, `setup`, `chef`, `harness` and the
+prep's own vocabulary — `gap`, `setup`, `chef`, `harness`, `handoff` and the
 rest — is in `CONTEXT.md` at the root, and this file uses those terms as they
 are defined there. The reverse is not true: the root glossary names this script
 once. `CONTEXT-MAP.md` says which of the two to read.
@@ -51,7 +51,7 @@ and the guidance in `--json` is the contract between the two.
 The exception is the chain itself. **A link is what the destination needs at run
 time, and the script installs every link with a command of its own**
 (docs/adr/0013, docs/adr/0017). Claude Code is a link because without a harness
-there is nobody to read the permission files `prep setup` just wrote; it comes
+there is nobody to hand the project `prep setup` just seeded to; it comes
 from the vendor's native installer and not from the registry. Node is a link
 because that installer lays down a `claude` that will not start without one and
 never mentions it — the tarball nodejs.org publishes, pinned and checksummed,
@@ -291,7 +291,7 @@ where it stopped. What comes back from `--json` is a different kind of thing: a
 machine missing `fd` is an inconvenience, so a gap that will not close is
 collected and printed at the end, and the project still gets set up. **The
 harness's plugins are gaps too** (docs/adr/0022). The harness is a link because
-without it nobody reads the permission files `prep setup` writes; a plugin has
+without it nobody reads the guidance `prep setup` seeds; a plugin has
 no such claim, and a marketplace is somebody else's file whose schema moves. A
 run that lost a whole machine to one is what that costs, and it happened.
 
@@ -300,8 +300,8 @@ read-only questions its **pass** items ask — `gh auth status`, `git config
 --get` — and changes nothing on any path (docs/adr/0010, narrowed by
 docs/adr/0026). chef reads, decides, and reports, naming a command or a
 document for each gap. That is why `sudo` is not prep's question — a shell
-script running it is ordinary, and a tool that closes secrets with `deny` never
-ends up asking for root in the same run.
+script running it is ordinary, and a tool that only reads and reports never ends
+up asking for root in the same run.
 
 The script does not decide what prep decides. prep's two subcommands divide on
 purpose and not on scope: **chef reads, setup writes** (docs/adr/0027).

@@ -3,12 +3,16 @@ import { describe, expect, test } from "bun:test";
 import {
   PluginsError,
   type RecommendInput,
+  detectTypes,
+  enableCommand,
+  installCommand,
   parseInstalledPlugins,
   pluginId,
+  readEnabledPlugins,
   readInstalledPlugins,
   recommend as recommendPlugins,
   serverInstallCommand,
-  toEnable,
+  typeMarkers,
 } from "../src/plugins.ts";
 import type { InstalledPlugin, ProjectType, SetupFs, WhichFn } from "../src/types.ts";
 
@@ -40,7 +44,11 @@ function forProject(id: string, projectPath: string): InstalledPlugin {
   return { id, scope: "project", projectPath };
 }
 
-function ids(detected: ProjectType[], installed: InstalledPlugin[] = [], enabled?: unknown) {
+function ids(
+  detected: ProjectType[],
+  installed: InstalledPlugin[] = [],
+  enabled?: Record<string, unknown>,
+) {
   return recommend({ detected, root: ROOT, enabled, installed }).map(pluginId);
 }
 
@@ -197,29 +205,118 @@ describe("the language server the plugin points at", () => {
   });
 });
 
-describe("which entries a run writes", () => {
-  const NODE = { detected: ["node"] as ProjectType[], root: ROOT };
+describe("the commands a person is shown", () => {
+  const PLUGIN = { name: "typescript-lsp", marketplace: MARKETPLACE };
 
-  test("a plugin installed with its server on PATH is written", () => {
-    const installed = [machineWide(TYPESCRIPT)];
-    expect(toEnable(recommend({ ...NODE, installed, which: FOUND }))).toEqual([TYPESCRIPT]);
+  test("a plugin the machine does not hold is installed with the harness's own command", () => {
+    expect(installCommand(PLUGIN)).toBe(`claude plugin install ${TYPESCRIPT}`);
   });
 
-  test("a plugin whose server is not on PATH is not written — the entry would configure nothing", () => {
-    const installed = [machineWide(TYPESCRIPT)];
-    expect(toEnable(recommend({ ...NODE, installed, which: NOT_FOUND }))).toEqual([]);
+  test("an installed one is turned on for the project, not for the whole machine", () => {
+    expect(enableCommand(PLUGIN)).toBe(`claude plugin enable ${TYPESCRIPT} --scope project`);
+  });
+});
+
+describe("which file decides which type", () => {
+  /** A file system holding exactly these paths, none of them readable. */
+  function holding(...paths: string[]): SetupFs {
+    return {
+      exists: (path) => paths.includes(path),
+      isDirectory: () => false,
+      read: () => {
+        throw new Error("a marker is looked for, never opened");
+      },
+      write: () => {
+        throw new Error("detection writes nothing");
+      },
+    };
+  }
+
+  test("package.json is node and pyproject.toml is python, and nothing else is a marker", () => {
+    expect(typeMarkers()).toEqual([
+      { type: "node", marker: "package.json" },
+      { type: "python", marker: "pyproject.toml" },
+    ]);
   });
 
-  test("a plugin that is not installed is not written, server or no server", () => {
-    for (const which of [FOUND, NOT_FOUND]) {
-      expect(toEnable(recommend({ ...NODE, installed: [], which }))).toEqual([]);
+  test("a marker in the project root decides the type", () => {
+    expect(detectTypes(ROOT, holding("/project/package.json"))).toEqual(["node"]);
+    expect(detectTypes(ROOT, holding("/project/pyproject.toml"))).toEqual(["python"]);
+  });
+
+  test("both markers make both types, in table order", () => {
+    expect(detectTypes(ROOT, holding("/project/pyproject.toml", "/project/package.json"))).toEqual([
+      "node",
+      "python",
+    ]);
+  });
+
+  test("requirements.txt and setup.py are too weak a signal to key off", () => {
+    expect(detectTypes(ROOT, holding("/project/requirements.txt", "/project/setup.py"))).toEqual([]);
+  });
+
+  test("a marker somewhere else is not this project's", () => {
+    expect(detectTypes(ROOT, holding("/elsewhere/package.json"))).toEqual([]);
+  });
+});
+
+describe("reading what the project settings say", () => {
+  const SETTINGS = "/project/.claude/settings.json";
+
+  function holding(text?: string): SetupFs {
+    return {
+      exists: (path) => path === SETTINGS && text !== undefined,
+      isDirectory: () => false,
+      read: () => text!,
+      write: () => {
+        throw new Error("the settings file is read and never written");
+      },
+    };
+  }
+
+  test("no file means nobody has answered for any plugin", () => {
+    expect(readEnabledPlugins(ROOT, holding())).toEqual({});
+  });
+
+  test("the plugin block comes back as it stands, on and off alike", () => {
+    const text = JSON.stringify({ enabledPlugins: { [TYPESCRIPT]: true, [PYRIGHT]: false } });
+    expect(readEnabledPlugins(ROOT, holding(text))).toEqual({
+      [TYPESCRIPT]: true,
+      [PYRIGHT]: false,
+    });
+  });
+
+  test("every other key is left unread, whatever shape it has", () => {
+    const text = JSON.stringify({ permissions: "not even an object", hooks: [], model: 3 });
+    expect(readEnabledPlugins(ROOT, holding(text))).toEqual({});
+  });
+
+  test("a plugin block that is not an object names no plugin", () => {
+    for (const block of [[TYPESCRIPT], "all", null, true]) {
+      const text = JSON.stringify({ enabledPlugins: block });
+      expect(readEnabledPlugins(ROOT, holding(text))).toEqual({});
     }
   });
 
-  test("a plugin the settings file has answered for is not written again", () => {
-    const installed = [machineWide(TYPESCRIPT)];
-    const enabled = { [TYPESCRIPT]: true };
-    expect(toEnable(recommend({ ...NODE, enabled, installed, which: FOUND }))).toEqual([]);
+  test("a file that is not JSON stops the run, naming the path", () => {
+    expect(() => readEnabledPlugins(ROOT, holding("{ not json"))).toThrow(PluginsError);
+    expect(() => readEnabledPlugins(ROOT, holding("{ not json"))).toThrow(SETTINGS);
+  });
+
+  test("a file whose top level is not an object stops the run too", () => {
+    for (const text of ["[]", '"settings"', "null"]) {
+      expect(() => readEnabledPlugins(ROOT, holding(text))).toThrow(PluginsError);
+    }
+  });
+
+  test("a file that cannot be read stops the run, naming the path", () => {
+    const fs: SetupFs = {
+      ...holding("{}"),
+      read: () => {
+        throw new Error("EACCES: permission denied");
+      },
+    };
+    expect(() => readEnabledPlugins(ROOT, fs)).toThrow(/settings\.json.*EACCES/);
   });
 });
 

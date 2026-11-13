@@ -3,16 +3,16 @@ import { join } from "node:path";
 import type { HandoffItemId, HandoffResult, HandoffStatus, SetupFs } from "./types.ts";
 
 /**
- * What is still owed on the harness side once prep has written its settings.
+ * What is still owed on the harness side once prep has seeded the guidance file.
  *
- * prep writes permissions; the agent's own guidance — what language to write
- * in, where issues live, where the domain docs are — is written by
+ * prep answers the language question; the rest of the agent's guidance — where
+ * issues live, where the domain docs are — is written by
  * `/setup-matt-pocock-skills` in the harness. This module reads the project to
  * say which of those have landed, so the setup report can name what is left
  * instead of falling silent after the file is written.
  *
  * It reads and never writes, and it decides from the text alone: no LLM call,
- * no process (docs/adr/0002). Fixed input, fixed answer.
+ * no process (docs/adr/0010). Fixed input, fixed answer.
  */
 
 /** A file that could not be read. Turned into a setup error where the run is driven from. */

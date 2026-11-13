@@ -1,30 +1,20 @@
 import { describe, expect, test } from "bun:test";
 
-import { planMerge } from "../src/merge.ts";
 import { nextSteps } from "../src/next.ts";
 import type {
   ArtifactStatus,
-  ClaudeSettings,
   HandoffResult,
   HarnessPresence,
-  MergePlan,
   NextStep,
   NextStepId,
   SetupOutcome,
 } from "../src/types.ts";
 
 const ROOT = "/project";
-const SETTINGS = "/project/.claude/settings.json";
+const AGENTS_MD = "/project/AGENTS.md";
 
 const CLAUDE_COMMAND = "claude '/setup-matt-pocock-skills'";
 const CODEX_COMMAND = "codex '$setup-matt-pocock-skills'";
-
-const BASELINE: ClaudeSettings = {
-  permissions: { defaultMode: "acceptEdits", deny: [], allow: ["Bash(npm:*)"], ask: [] },
-};
-
-/** A merge waiting on somebody. */
-const PENDING = planMerge({ permissions: { allow: ["Bash(terraform:*)"] } }, BASELINE);
 
 const OWED: HandoffResult[] = [
   { id: "language", status: "missing", path: null },
@@ -46,7 +36,6 @@ function holding(...ids: readonly string[]): HarnessPresence[] {
   return (["claude-code", "codex"] as const).map((id) => ({
     id,
     installed: ids.includes(id),
-    covered: ids.includes(id) || ids.length === 0,
   }));
 }
 
@@ -55,14 +44,13 @@ const NEITHER = holding();
 
 function outcome(
   status: ArtifactStatus,
-  plan: MergePlan | null = null,
   handoff: HandoffResult[] = SETTLED,
   harnesses: HarnessPresence[] = BOTH,
 ): SetupOutcome {
   return {
     root: ROOT,
     detected: ["node"],
-    artifacts: [{ kind: "claude-settings", path: SETTINGS, status, settings: BASELINE, plan }],
+    artifacts: [{ kind: "agents-md", path: AGENTS_MD, status, contents: null }],
     harnesses,
     plugins: [],
     handoff,
@@ -85,19 +73,6 @@ function step(
 }
 
 describe("what to run next", () => {
-  test("a plan nobody approved sends the person back to a terminal", () => {
-    const steps = nextSteps(outcome("planned", PENDING));
-    expect(steps[0]).toEqual({ id: "approve", command: `prep setup ${ROOT}`, alternative: null });
-  });
-
-  test("an approved merge is nothing to go back and approve", () => {
-    expect(ids(outcome("merged", PENDING))).not.toContain("approve");
-  });
-
-  test("a refused merge is not reopened either — the answer was the answer", () => {
-    expect(ids(outcome("declined", PENDING))).not.toContain("approve");
-  });
-
   test("with nothing owed the harness is not mentioned", () => {
     expect(ids(outcome("applied"))).not.toContain("harness");
     expect(ids(outcome("applied"), NEITHER)).not.toContain("install-harness");
@@ -105,12 +80,11 @@ describe("what to run next", () => {
 
   test("a run that wrote something offers the machine check", () => {
     expect(ids(outcome("applied"))).toEqual(["chef"]);
-    expect(ids(outcome("merged", PENDING))).toEqual(["chef"]);
   });
 
   test("a run that wrote nothing offers it too — what is owed does not depend on this run", () => {
     expect(ids(outcome("skipped"))).toEqual(["chef"]);
-    expect(ids(outcome("declined", PENDING))).toEqual(["chef"]);
+    expect(ids(outcome("planned"))).toEqual(["chef"]);
   });
 
   test("a run with nothing project-side to do still points at the machine", () => {
@@ -119,19 +93,21 @@ describe("what to run next", () => {
     ]);
   });
 
-  test("the order is approve, then harness, then the machine", () => {
-    expect(ids(outcome("planned", PENDING, OWED))).toEqual(["approve", "harness", "chef"]);
-    expect(ids(outcome("merged", PENDING, OWED))).toEqual(["harness", "chef"]);
+  test("the order is the harness, then the machine", () => {
+    expect(ids(outcome("applied", OWED))).toEqual(["harness", "chef"]);
   });
 
-  test("the command carries the root, so it can be run from anywhere", () => {
-    const elsewhere = { ...outcome("planned", PENDING), root: "/somewhere/else" };
-    expect(nextSteps(elsewhere)[0]!.command).toBe("prep setup /somewhere/else");
+  test("no step sends anybody back to prep setup — the run asks nothing and leaves nothing open", () => {
+    for (const status of ["applied", "planned", "skipped"] as const) {
+      for (const step of nextSteps(outcome(status, OWED))) {
+        expect(step.command).not.toContain("prep setup");
+      }
+    }
   });
 });
 
 describe("the command that hands the project over", () => {
-  const owing = outcome("applied", null, OWED);
+  const owing = outcome("applied", OWED);
 
   test("what is owed comes back as a command for a harness this machine holds", () => {
     expect(step(owing, "harness", holding("claude-code"))).toEqual({
@@ -175,7 +151,7 @@ describe("the command that hands the project over", () => {
   });
 
   test("a run that wrote nothing names the harness too — what is owed was read either way", () => {
-    expect(ids(outcome("planned", null, OWED), holding("claude-code"))).toEqual([
+    expect(ids(outcome("planned", OWED), holding("claude-code"))).toEqual([
       "harness",
       "chef",
     ]);

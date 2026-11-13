@@ -1,18 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-import { approve, type RunDeps, type RunResult, run as runCli, setupExitCode } from "../src/cli.ts";
-import { planMerge } from "../src/merge.ts";
+import { type RunDeps, type RunResult, run as runCli, setupExitCode } from "../src/cli.ts";
 import { nextSteps } from "../src/next.ts";
-import type {
-  Artifact,
-  ConflictSide,
-  SettingsArtifact,
-  SetupFs,
-  SetupOutcome,
-  SetupPrompt,
-  WhichFn,
-} from "../src/types.ts";
+import type { Artifact, SetupFs, SetupOutcome, WhichFn } from "../src/types.ts";
 
 /**
  * A fake home directory.
@@ -63,26 +54,6 @@ function withSettings(value: unknown): Record<string, string> {
   return { [SETTINGS]: JSON.stringify(value) };
 }
 
-/** A person who answers the same way every time. Records everything put in front of them. */
-function fakePrompt(answers: { confirm: boolean; choose?: ConflictSide }) {
-  const shown: string[] = [];
-  const asked: string[] = [];
-  const prompt: SetupPrompt = {
-    show: (text) => {
-      shown.push(text);
-    },
-    confirm: (question) => {
-      asked.push(question);
-      return answers.confirm;
-    },
-    choose: (conflict) => {
-      asked.push(conflict.key);
-      return answers.choose ?? "existing";
-    },
-  };
-  return { prompt, shown, asked };
-}
-
 const PROJECT = "/project";
 const SETTINGS = "/project/.claude/settings.json";
 /** The guidance file prep seeds. */
@@ -90,19 +61,13 @@ const GUIDANCE = "/project/AGENTS.md";
 
 /** The file pointing Claude Code at the guidance. */
 const POINTER = "/project/CLAUDE.md";
-/** The Codex permission file. */
+/** The Codex permission file, which prep neither writes nor opens. */
 const CODEX_CONFIG = "/project/.codex/config.toml";
 
-/**
- * Every file prep writes without asking, already on disk.
- *
- * A run against this has nothing left to do but the merge, which is what the
- * blocks below are about: any write they see is the one under test.
- */
+/** Every file prep writes, already on disk. A run against this has nothing left to do. */
 const SEEDED = {
   [GUIDANCE]: "# AGENTS.md\n\n## Language\n\nEnglish in the repository.\n",
   [POINTER]: "@AGENTS.md\n",
-  [CODEX_CONFIG]: 'default_permissions = "project-edit"\n',
 };
 
 /** A Mac with every standard tool. fd and bat keep their macOS names. */
@@ -246,40 +211,13 @@ describe("idempotence", () => {
   });
 });
 
-/** A prompt that answers every question the same way and records what it was asked. */
-function chefPrompt(answer: boolean) {
-  const asked: string[] = [];
-  const prompt: SetupPrompt = {
-    show: () => {},
-    confirm: (question) => {
-      asked.push(question);
-      return answer;
-    },
-    choose: () => "existing",
-  };
-  return { prompt, asked };
-}
-
 describe("chef changes nothing", () => {
   const HALF_DARWIN = { brew: "/opt/homebrew/bin/brew", ...STANDARD_DARWIN };
 
-  test("a terminal on the other end is asked nothing", async () => {
-    const { prompt, asked } = chefPrompt(true);
-    const result = await run(["chef"], {
-      platformName: "darwin",
-      which: fakeWhich(HALF_DARWIN),
-      prompt,
-    });
-    expect(asked).toEqual([]);
-    expect(result.exitCode).toBe(1);
-  });
-
   test("the report never claims to have closed a gap", async () => {
-    const { prompt } = chefPrompt(true);
     const result = await run(["chef"], {
       platformName: "darwin",
       which: fakeWhich(HALF_DARWIN),
-      prompt,
     });
     expect(result.stdout).not.toContain("Installed claude-code");
     expect(result.stdout).not.toContain("(declined)");
@@ -295,20 +233,11 @@ describe("chef changes nothing", () => {
     expect(result.exitCode).toBe(1);
   });
 
-  test("a terminal run and a piped run report the same thing", async () => {
-    const deps = { platformName: "darwin", which: fakeWhich(HALF_DARWIN) };
-    const { prompt } = chefPrompt(true);
-    expect(await run(["chef"], { ...deps, prompt })).toEqual(await run(["chef"], deps));
-  });
-
-  test("Linux reports the same way, with nothing to approve", async () => {
-    const { prompt, asked } = chefPrompt(true);
+  test("Linux reports the same way", async () => {
     const result = await run(["chef"], {
       platformName: "linux",
       which: fakeWhich({ apt: "/usr/bin/apt", ...STANDARD_LINUX }),
-      prompt,
     });
-    expect(asked).toEqual([]);
     expect(result.exitCode).toBe(1);
   });
 });
@@ -510,42 +439,26 @@ describe("chef takes a path", () => {
 });
 
 describe("setup exit codes", () => {
-  test("writing the baseline is 0", async () => {
+  test("writing the guidance is 0", async () => {
     const { fs, written } = fakeFs([PROJECT, "/project/package.json"]);
     const result = await run(["setup", PROJECT], { fs });
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe("");
-    expect(written.has(SETTINGS)).toBe(true);
+    expect(written.has(GUIDANCE)).toBe(true);
   });
 
-  test("no known marker still writes the type-independent half, so 0", async () => {
+  test("no known marker writes the same two files, so 0", async () => {
     const { fs, written } = fakeFs([PROJECT]);
     const result = await run(["setup", PROJECT], { fs });
     expect(result.exitCode).toBe(0);
-    expect(written.has(SETTINGS)).toBe(true);
+    expect([...written.keys()]).toEqual([GUIDANCE, POINTER]);
   });
 
   test("a run with nothing left to write is 1", async () => {
-    const { fs, written } = fakeFs([PROJECT, "/project/package.json"], {
-      ...SEEDED,
-      ...withSettings({ permissions: { allow: [] } }),
-    });
+    const { fs, written } = fakeFs([PROJECT, "/project/package.json"], SEEDED);
     const result = await run(["setup", PROJECT], { fs });
     expect(result.exitCode).toBe(1);
     expect(written.size).toBe(0);
-  });
-
-  test("an existing settings file with nobody to ask is left alone, and the seed still counts", async () => {
-    const { fs, written } = fakeFs(
-      [PROJECT, "/project/package.json"],
-      withSettings({ permissions: { allow: [] } }),
-    );
-    // One file written is enough for 0. The settings file is untouched, and the
-    // report says so — a run that did part of what it came for is not a failure.
-    const result = await run(["setup", PROJECT], { fs });
-    expect(result.exitCode).toBe(0);
-    expect(written.has(SETTINGS)).toBe(false);
-    expect(written.has(GUIDANCE)).toBe(true);
   });
 
   test("a path that does not exist is 2", async () => {
@@ -562,6 +475,11 @@ describe("setup exit codes", () => {
     expect(result.exitCode).toBe(0);
     expect(written.size).toBe(0);
   });
+
+  test("a dry run with nothing to write is 1", async () => {
+    const { fs } = fakeFs([PROJECT, "/project/package.json"], SEEDED);
+    expect((await run(["setup", PROJECT, "--dry-run"], { fs })).exitCode).toBe(1);
+  });
 });
 
 describe("setup argument parsing", () => {
@@ -569,7 +487,7 @@ describe("setup argument parsing", () => {
     const { fs, written } = fakeFs([PROJECT, "/project/package.json"]);
     const result = await run(["setup"], { fs, cwd: PROJECT });
     expect(result.exitCode).toBe(0);
-    expect([...written.keys()]).toEqual([SETTINGS, CODEX_CONFIG, GUIDANCE, POINTER]);
+    expect([...written.keys()]).toEqual([GUIDANCE, POINTER]);
   });
 
   test("the flag may come before the path", async () => {
@@ -605,259 +523,157 @@ describe("setup argument parsing", () => {
   test("--help mentions setup", async () => {
     expect((await run(["--help"], {})).stdout).toContain("prep setup");
   });
+
+  test("--help promises no permission file", async () => {
+    const usage = (await run(["--help"], {})).stdout;
+    expect(usage).toContain("prep writes no permission or settings file");
+    expect(usage).not.toContain("config.toml");
+    expect(usage).not.toContain("allowlist");
+  });
 });
 
 describe("setup output", () => {
-  test("names the detected type and the file it wrote", async () => {
+  test("names the detected type and the files it wrote", async () => {
     const { fs } = fakeFs([PROJECT, "/project/package.json"]);
     const stdout = (await run(["setup", PROJECT], { fs })).stdout;
     expect(stdout).toContain("node");
     expect(stdout).toContain("package.json");
-    expect(stdout).toContain("Bash(npm:*)");
-    expect(stdout).toContain(SETTINGS);
+    expect(stdout).toContain(`Wrote ${GUIDANCE}`);
+    expect(stdout).toContain(`Wrote ${POINTER}`);
   });
 
-  test("a polyglot project shows both types and both allowlists", async () => {
+  test("a polyglot project shows both types and both plugins", async () => {
     const { fs } = fakeFs([PROJECT, "/project/package.json", "/project/pyproject.toml"]);
     const stdout = (await run(["setup", PROJECT], { fs })).stdout;
     expect(stdout).toContain("node");
     expect(stdout).toContain("python");
-    expect(stdout).toContain("Bash(npm:*)");
-    expect(stdout).toContain("Bash(uv:*)");
+    expect(stdout).toContain("typescript-lsp");
+    expect(stdout).toContain("pyright-lsp");
   });
 
-  test("an existing file with nobody to ask shows the merge and says nothing was written", async () => {
-    const { fs } = fakeFs(
-      [PROJECT, "/project/package.json"],
-      withSettings({ permissions: { allow: [] } }),
-    );
+  test("no permission rule is shown, because none is written", async () => {
+    const { fs } = fakeFs([PROJECT, "/project/package.json"]);
     const stdout = (await run(["setup", PROJECT], { fs })).stdout;
-    expect(stdout).toContain("already exists");
-    expect(stdout).toContain("Nothing has been written yet");
-    expect(stdout).toContain("+ Bash(npm:*)");
+    for (const gone of ["Bash(", "Read(./.env)", "Allowing", "Denying", "acceptEdits"]) {
+      expect(stdout).not.toContain(gone);
+    }
   });
 
-  test("with no marker it names the markers it looked for and what it still wrote", async () => {
+  test("with no marker it names the markers it looked for", async () => {
     const stdout = (await run(["setup", PROJECT], { fs: fakeFs([PROJECT]).fs })).stdout;
     expect(stdout).toContain("package.json");
     expect(stdout).toContain("pyproject.toml");
-    expect(stdout).toContain("type-independent");
-    expect(stdout).toContain("Read(./.env)");
-    expect(stdout).toContain("Bash(git:*)");
-    expect(stdout).not.toContain("Bash(npm:*)");
+    expect(stdout).not.toContain("Plugins (");
   });
 
-  test("a dry run says nothing was written, but still shows the rules", async () => {
+  test("a dry run says nothing was written", async () => {
     const { fs } = fakeFs([PROJECT, "/project/package.json"]);
     const stdout = (await run(["setup", PROJECT, "--dry-run"], { fs })).stdout;
-    expect(stdout).toContain("Bash(npm:*)");
     expect(stdout).toContain("Dry run");
+    expect(stdout).not.toContain("Wrote ");
   });
 });
 
 describe("setup idempotence", () => {
-  test("the second run over the first run's own file does nothing", async () => {
+  test("the second run over the first run's own files does nothing", async () => {
     const { fs, written } = fakeFs([PROJECT, "/project/package.json"]);
     expect((await run(["setup", PROJECT], { fs })).exitCode).toBe(0);
-    const first = written.get(SETTINGS);
+    const first = new Map(written);
 
     const second = await run(["setup", PROJECT], { fs });
     expect(second.exitCode).toBe(1);
-    expect(written.get(SETTINGS)).toBe(first);
+    expect(written).toEqual(first);
   });
 
-  test("a merge somebody approved is not proposed again", async () => {
-    const { fs, written } = fakeFs(
-      [PROJECT, "/project/package.json"],
-      withSettings({ permissions: { allow: ["Bash(terraform:*)"] } }),
-    );
-    const { prompt } = fakePrompt({ confirm: true });
-
-    expect((await run(["setup", PROJECT], { fs, prompt })).exitCode).toBe(0);
-    const merged = written.get(SETTINGS);
-
-    const second = await run(["setup", PROJECT], { fs, prompt });
-    expect(second.exitCode).toBe(1);
-    expect(second.stdout).toContain("already covers this baseline");
-    expect(written.get(SETTINGS)).toBe(merged);
+  test("the second run reports the same thing every time after", async () => {
+    const { fs } = fakeFs([PROJECT, "/project/package.json"]);
+    await run(["setup", PROJECT], { fs });
+    expect(await run(["setup", PROJECT], { fs })).toEqual(await run(["setup", PROJECT], { fs }));
   });
 });
 
-describe("merging into an existing settings file", () => {
-  // A guidance file is already there, so the seed has nothing to do and every
-  // write in this block is the merge under test.
+describe("setup leaves the permission files alone", () => {
   const PRESENT = [PROJECT, "/project/package.json"];
-  const MINE = {
-    ...SEEDED,
-    ...withSettings({
-      permissions: { defaultMode: "plan", allow: ["Bash(terraform:*)"] },
-      model: "opus",
-    }),
+  const TYPESCRIPT = "typescript-lsp@claude-plugins-official";
+  /** The install record of a machine holding it across every project. */
+  const HELD = {
+    [RECORD]: JSON.stringify({ version: 2, plugins: { [TYPESCRIPT]: [{ scope: "user" }] } }),
   };
+  const MINE = withSettings({
+    permissions: { defaultMode: "plan", allow: ["Bash(terraform:*)"] },
+    model: "opus",
+  });
 
-  test("approving writes the merge and is 0", async () => {
+  test("a project with neither file gets neither", async () => {
+    const { fs, written } = fakeFs(PRESENT);
+    await run(["setup", PROJECT], { fs, which: fakeWhich(HARNESSES) });
+    expect(written.has(SETTINGS)).toBe(false);
+    expect(written.has(CODEX_CONFIG)).toBe(false);
+  });
+
+  test("an existing settings file is not written to, and is not reported as a file", async () => {
     const { fs, written } = fakeFs(PRESENT, MINE);
-    const { prompt } = fakePrompt({ confirm: true });
-
-    const result = await run(["setup", PROJECT], { fs, prompt });
+    const result = await run(["setup", PROJECT], { fs });
     expect(result.exitCode).toBe(0);
-
-    const settings = JSON.parse(written.get(SETTINGS)!);
-    expect(settings.permissions.allow).toContain("Bash(terraform:*)");
-    expect(settings.permissions.allow).toContain("Bash(npm:*)");
-    expect(settings.model).toBe("opus");
+    expect(written.has(SETTINGS)).toBe(false);
+    expect(fs.read(SETTINGS)).toBe(MINE[SETTINGS]!);
+    expect(result.stdout).not.toContain(SETTINGS);
   });
 
-  test("refusing leaves the file byte for byte as it was, and is 1", async () => {
+  test("an existing Codex config is not written to either", async () => {
+    const mine = 'model = "o3"\n';
+    const { fs, written } = fakeFs(PRESENT, { [CODEX_CONFIG]: mine });
+    const result = await run(["setup", PROJECT], { fs, which: fakeWhich(HARNESSES) });
+    expect(written.has(CODEX_CONFIG)).toBe(false);
+    expect(fs.read(CODEX_CONFIG)).toBe(mine);
+    expect(result.stdout).not.toContain("config.toml");
+  });
+
+  test("an installed plugin is named with the command that turns it on, and no entry is written", async () => {
+    const { fs, written } = fakeFs(PRESENT, { ...MINE, ...HELD });
+    const result = await run(["setup", PROJECT], { fs });
+    expect(result.stdout).toContain(`claude plugin enable ${TYPESCRIPT} --scope project`);
+    expect(written.has(SETTINGS)).toBe(false);
+  });
+
+  test("a plugin the machine does not hold is named with the command that installs it", async () => {
     const { fs, written } = fakeFs(PRESENT, MINE);
-    const { prompt } = fakePrompt({ confirm: false });
-
-    const result = await run(["setup", PROJECT], { fs, prompt });
-    expect(result.exitCode).toBe(1);
-    expect(written.size).toBe(0);
-    expect(result.stdout).toContain("exactly as it was");
+    const result = await run(["setup", PROJECT], { fs });
+    expect(result.stdout).toContain(`claude plugin install ${TYPESCRIPT}`);
+    expect(written.has(SETTINGS)).toBe(false);
   });
 
-  test("the diff is in front of the person before the first question", async () => {
-    const { fs } = fakeFs(PRESENT, MINE);
-    const { prompt, shown, asked } = fakePrompt({ confirm: true });
-
-    await run(["setup", PROJECT], { fs, prompt });
-    expect(shown[0]).toContain("+ Bash(npm:*)");
-    expect(shown[0]).toContain("To decide (1)");
-    expect(asked).toEqual(["defaultMode", "Apply this merge?"]);
-  });
-
-  test("the last thing shown before writing is what will land", async () => {
-    const { fs } = fakeFs(PRESENT, MINE);
-    const { prompt, shown } = fakePrompt({ confirm: true, choose: "preset" });
-
-    await run(["setup", PROJECT], { fs, prompt });
-    const summary = shown[shown.length - 1]!;
-    expect(summary).toContain(SETTINGS);
-    expect(summary).toContain("acceptEdits");
-  });
-
-  test("the answer to a conflict is the value that lands", async () => {
-    for (const [side, mode] of [
-      ["existing", "plan"],
-      ["preset", "acceptEdits"],
-    ] as const) {
-      const { fs, written } = fakeFs(PRESENT, MINE);
-      const { prompt } = fakePrompt({ confirm: true, choose: side });
-
-      await run(["setup", PROJECT], { fs, prompt });
-      expect(JSON.parse(written.get(SETTINGS)!).permissions.defaultMode).toBe(mode);
-    }
-  });
-
-  describe("turning an installed plugin on", () => {
-    const TYPESCRIPT = "typescript-lsp@claude-plugins-official";
-    /** The install record of a machine holding it across every project. */
-    const HELD = {
-      [RECORD]: JSON.stringify({ version: 2, plugins: { [TYPESCRIPT]: [{ scope: "user" }] } }),
-    };
-
-    test("the entry shows in the diff before anybody answers, and lands once they do", async () => {
-      const { fs, written } = fakeFs(PRESENT, { ...MINE, ...HELD });
-      const { prompt, shown } = fakePrompt({ confirm: true });
-
-      const result = await run(["setup", PROJECT], { fs, prompt });
-      expect(result.exitCode).toBe(0);
-      expect(shown[0]).toContain(`+ ${TYPESCRIPT}`);
-      expect(JSON.parse(written.get(SETTINGS)!).enabledPlugins).toEqual({ [TYPESCRIPT]: true });
+  test("an entry somebody switched off is an answer, so nothing is recommended", async () => {
+    const { fs } = fakeFs(PRESENT, {
+      ...HELD,
+      ...withSettings({ permissions: { allow: [] }, enabledPlugins: { [TYPESCRIPT]: false } }),
     });
-
-    test("the summary before writing says a plugin is being turned on", async () => {
-      const { fs } = fakeFs(PRESENT, { ...MINE, ...HELD });
-      const { prompt, shown } = fakePrompt({ confirm: true });
-
-      await run(["setup", PROJECT], { fs, prompt });
-      expect(shown[shown.length - 1]).toContain("1 plugin");
-    });
-
-    test("refusing the merge leaves no entry behind", async () => {
-      const { fs, written } = fakeFs(PRESENT, { ...MINE, ...HELD });
-      const { prompt } = fakePrompt({ confirm: false });
-
-      expect((await run(["setup", PROJECT], { fs, prompt })).exitCode).toBe(1);
-      expect(written.size).toBe(0);
-    });
-
-    test("a plugin the machine does not hold is named, and no entry is written", async () => {
-      const { fs, written } = fakeFs(PRESENT, MINE);
-      const { prompt } = fakePrompt({ confirm: true });
-
-      const result = await run(["setup", PROJECT], { fs, prompt });
-      expect(result.stdout).toContain(`claude plugin install ${TYPESCRIPT}`);
-      expect(JSON.parse(written.get(SETTINGS)!).enabledPlugins).toBeUndefined();
-    });
-
-    test("an entry somebody switched off survives the merge untouched", async () => {
-      const { fs, written } = fakeFs(PRESENT, {
-        ...SEEDED,
-        ...HELD,
-        ...withSettings({ permissions: { allow: [] }, enabledPlugins: { [TYPESCRIPT]: false } }),
-      });
-      const { prompt } = fakePrompt({ confirm: true });
-
-      const result = await run(["setup", PROJECT], { fs, prompt });
-      expect(JSON.parse(written.get(SETTINGS)!).enabledPlugins).toEqual({ [TYPESCRIPT]: false });
-      // Nothing is recommended once the file has answered, so the block is gone.
-      expect(result.stdout).not.toContain("Plugins (");
-    });
+    const result = await run(["setup", PROJECT], { fs });
+    expect(result.stdout).not.toContain("Plugins (");
   });
 
-  test("a merge with nothing to decide asks once and writes", async () => {
-    const { fs, written } = fakeFs(PRESENT, withSettings({ permissions: { allow: [] } }));
-    const { prompt, asked } = fakePrompt({ confirm: true });
-
-    expect((await run(["setup", PROJECT], { fs, prompt })).exitCode).toBe(0);
-    expect(asked).toEqual(["Apply this merge?"]);
-    expect(written.has(SETTINGS)).toBe(true);
+  test("the plugin block is shown on a machine with no Claude Code", async () => {
+    const { fs } = fakeFs(PRESENT, HELD);
+    const result = await run(["setup", PROJECT], { fs, which: fakeWhich({ codex: HARNESSES.codex }) });
+    expect(result.stdout).toContain("Plugins (1)");
   });
 
-  test("--json asks nothing and writes nothing, so a pipe never stops on a question", async () => {
-    const { fs, written } = fakeFs(PRESENT, MINE);
-    const { prompt, asked, shown } = fakePrompt({ confirm: true });
-
-    const result = await run(["setup", PROJECT, "--json"], { fs, prompt });
-    expect(asked).toEqual([]);
-    expect(shown).toEqual([]);
-    expect(written.size).toBe(0);
-    expect(result.exitCode).toBe(1);
-    expect(JSON.parse(result.stdout).artifacts[0].status).toBe("planned");
-  });
-
-  test("--dry-run asks nothing, writes nothing, and is 0", async () => {
-    const { fs, written } = fakeFs(PRESENT, MINE);
-    const { prompt, asked } = fakePrompt({ confirm: true });
-
-    const result = await run(["setup", PROJECT, "--dry-run"], { fs, prompt });
-    expect(asked).toEqual([]);
-    expect(written.size).toBe(0);
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("+ Bash(npm:*)");
-  });
-
-  test("a file prep cannot merge is 2, with the path on stderr and nothing written", async () => {
+  test("a settings file prep cannot read is 2, with the path on stderr and nothing written", async () => {
     const { fs, written } = fakeFs(PRESENT, { [SETTINGS]: "{ not json" });
-    const { prompt } = fakePrompt({ confirm: true });
-
-    const result = await run(["setup", PROJECT], { fs, prompt });
+    const result = await run(["setup", PROJECT], { fs });
     expect(result.exitCode).toBe(2);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain(SETTINGS);
     expect(written.size).toBe(0);
   });
 
-  test("a project with no settings file is written without a question", async () => {
-    const { fs, written } = fakeFs(PRESENT);
-    const { prompt, asked } = fakePrompt({ confirm: false });
-
-    expect((await run(["setup", PROJECT], { fs, prompt })).exitCode).toBe(0);
-    expect(asked).toEqual([]);
-    expect(written.has(SETTINGS)).toBe(true);
+  test("--json and --dry-run leave both files alone too", async () => {
+    for (const flag of ["--json", "--dry-run"]) {
+      const { fs, written } = fakeFs(PRESENT, { ...MINE, ...HELD });
+      await run(["setup", PROJECT, flag], { fs, which: fakeWhich(HARNESSES) });
+      expect(written.has(SETTINGS)).toBe(false);
+      expect(written.has(CODEX_CONFIG)).toBe(false);
+    }
   });
 });
 
@@ -910,12 +726,19 @@ describe("the handoff on the way out", () => {
   });
 
   test("what is still owed does not change the exit code", async () => {
-    const owing = await run(["setup", PROJECT], { fs: fakeFs(NODE).fs, which: WITH_HARNESSES });
+    // Both projects already hold every file prep writes, so neither run writes
+    // anything and the only difference between them is what the harness owes.
+    const owing = await run(["setup", PROJECT], {
+      fs: fakeFs(NODE, SEEDED).fs,
+      which: WITH_HARNESSES,
+    });
     const settled = await run(["setup", PROJECT], {
       fs: fakeFs(NODE, SETTLED).fs,
       which: WITH_HARNESSES,
     });
-    expect(owing.exitCode).toBe(0);
+    expect(owing.stdout).toContain("2 still owed");
+    expect(settled.stdout).toContain("Nothing owed");
+    expect(owing.exitCode).toBe(1);
     expect(settled.exitCode).toBe(owing.exitCode);
   });
 
@@ -949,29 +772,16 @@ describe("the handoff on the way out", () => {
 });
 
 describe("a run with several files", () => {
-  const OTHER = "/project/.other/settings.json";
-
-  /** A baseline that adds one rule to a file holding one rule of its own. */
-  function pending(path: string): SettingsArtifact {
-    const plan = planMerge(
-      { permissions: { allow: ["Bash(terraform:*)"] } },
-      {
-        permissions: {
-          defaultMode: "acceptEdits",
-          deny: [],
-          allow: ["Bash(npm:*)"],
-          ask: [],
-        },
-      },
-    );
-    return { kind: "claude-settings", path, status: "planned", settings: plan.merged, plan };
-  }
-
-  function outcomeOf(artifacts: Artifact[]): SetupOutcome {
+  function outcomeOf(statuses: Artifact["status"][]): SetupOutcome {
     const base: SetupOutcome = {
       root: PROJECT,
       detected: ["node"],
-      artifacts,
+      artifacts: statuses.map((status, index): Artifact => ({
+        kind: index === 0 ? "agents-md" : "claude-md",
+        path: index === 0 ? GUIDANCE : POINTER,
+        status,
+        contents: null,
+      })),
       harnesses: [],
       plugins: [],
       handoff: [],
@@ -980,76 +790,23 @@ describe("a run with several files", () => {
     return { ...base, next: nextSteps(base) };
   }
 
-  /** A person who answers each question in turn, so one file can be taken and the next refused. */
-  function answering(confirms: boolean[]) {
-    const asked: string[] = [];
-    const prompt: SetupPrompt = {
-      show: () => {},
-      confirm: (question) => {
-        asked.push(question);
-        return confirms[asked.length - 1] ?? false;
-      },
-      choose: () => "existing",
-    };
-    return { prompt, asked };
-  }
-
-  test("each file is asked about on its own", async () => {
-    const { fs } = fakeFs([PROJECT]);
-    const { prompt, asked } = answering([true, true]);
-
-    approve(outcomeOf([pending(SETTINGS), pending(OTHER)]), prompt, { fs });
-    expect(asked).toEqual(["Apply this merge?", "Apply this merge?"]);
-  });
-
-  test("refusing one file does not stop the next from being written", async () => {
-    const { fs, written } = fakeFs([PROJECT]);
-    const { prompt } = answering([false, true]);
-
-    const after = approve(outcomeOf([pending(SETTINGS), pending(OTHER)]), prompt, { fs });
-    expect(after.artifacts.map((one) => one.status)).toEqual(["declined", "merged"]);
-    expect([...written.keys()]).toEqual([OTHER]);
-  });
-
-  test("a file that was already settled is not asked about again", async () => {
-    const { fs, written } = fakeFs([PROJECT]);
-    const { prompt, asked } = answering([true]);
-    const settled: Artifact = {
-      kind: "claude-settings",
-      path: SETTINGS,
-      status: "skipped",
-      settings: null,
-      plan: null,
-    };
-
-    const after = approve(outcomeOf([settled, pending(OTHER)]), prompt, { fs });
-    expect(asked).toHaveLength(1);
-    expect(after.artifacts[0]!.status).toBe("skipped");
-    expect([...written.keys()]).toEqual([OTHER]);
-  });
-
-  test("one written file is enough for 0, whatever the others ended on", async () => {
+  test("one written file is enough for 0, whatever the other ended on", () => {
     const cases: [Artifact["status"][], boolean, number][] = [
-      // One written, one refused: the run did part of what it came for.
-      [["merged", "declined"], false, 0],
+      [["applied", "applied"], false, 0],
+      // One written, one already standing: the run did what there was to do.
       [["applied", "skipped"], false, 0],
+      [["skipped", "applied"], false, 0],
       // Nothing written at all is the ordinary observation, not a failure.
-      [["declined", "skipped"], false, 1],
-      [["planned", "planned"], false, 1],
+      [["skipped", "skipped"], false, 1],
+      [["skipped"], false, 1],
       // A dry run was asked for a plan and produced one.
+      [["planned", "planned"], true, 0],
       [["planned", "skipped"], true, 0],
       [["skipped", "skipped"], true, 1],
     ];
 
     for (const [statuses, dryRun, code] of cases) {
-      const artifacts = statuses.map((status, index): Artifact => ({
-        kind: "claude-settings",
-        path: index === 0 ? SETTINGS : OTHER,
-        status,
-        settings: null,
-        plan: null,
-      }));
-      expect(setupExitCode(outcomeOf(artifacts), dryRun)).toBe(code);
+      expect(setupExitCode(outcomeOf(statuses), dryRun)).toBe(code);
     }
   });
 });

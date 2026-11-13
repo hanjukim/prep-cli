@@ -1,9 +1,8 @@
 # prep
 
-A security-first CLI that sets up a project and the machine it is worked on.
-Deny by default: the permission files it writes close reading secrets and close
-the commands nobody can walk back, and open the toolchain the project's own
-language needs.
+A CLI that sets up a project and the machine it is worked on, for coding agents.
+It reads, decides and reports — and writes two files of prose where a project
+has none.
 
 prep does two things and nothing else.
 
@@ -11,13 +10,13 @@ prep does two things and nothing else.
   manager, the standard tools, the agent CLIs — with the command or the document
   that closes each gap, and the accounts only you can settle. Hand it a path and
   it reports on that project as well. It never guesses which project you are in.
-- **`prep setup`** reads a project and writes the permission files the agent CLIs
-  installed here will read: `.claude/settings.json` for Claude Code,
-  `.codex/config.toml` for Codex. Where a project carries no guidance file it
-  seeds `AGENTS.md` and points Claude Code at it.
+- **`prep setup`** reads a project. Where it carries no guidance file it seeds
+  `AGENTS.md` and points Claude Code at it, and it names the language server
+  plugin the project's type calls for. It writes no permission file and changes
+  no settings file.
 
-**prep changes nothing.** Every path through it is a read, a decision, and a
-report. It prints a command; a person runs it. The only processes it starts are a
+**prep changes nothing that already stands.** Every path through it is a read,
+a decision, and a report. It prints a command; a person runs it. The only processes it starts are a
 handful of fixed read-only questions — `gh auth status`, `git config --get` — and
 it never opens what they print.
 
@@ -85,23 +84,24 @@ a failure:
 ## What a setup run writes
 
 Each file is one artifact, carrying its own path and its own status — applied,
-planned, merged, declined, or skipped.
+planned, or skipped. A run asks no question.
 
-- **Permission files, one per agent CLI on this machine.** A file for a harness
-  nobody has installed is a file nobody opens. On a machine holding no harness at
-  all the Claude files are written anyway, because the project has to carry its
-  baseline somewhere.
-- **A settings file that already stands is merged into, never overwritten.** The
-  rules are a union, keys prep knows nothing about ride through untouched, and a
-  scalar that differs is reported as a conflict rather than settled by prep. The
-  diff goes up first, each conflict is put one at a time, and declining leaves
-  the file byte for byte as it was. A run reading from a pipe asks nothing and
-  writes nothing that needed an answer.
 - **`AGENTS.md`, where no guidance file stands**, with the language rule filled
   in. A guidance file that already stands, even an empty one, is left alone.
-- **The language server plugin the project's type calls for** is named; one
-  already installed and reachable on PATH is switched on. A person installs it,
-  prep enables it.
+- **`CLAUDE.md`, one line importing it**, because Claude Code reads that name
+  and not `AGENTS.md`. A `CLAUDE.md` that already stands is left alone.
+
+And one thing it reports without writing:
+
+- **The language server plugin the project's type calls for**, with the command
+  that installs it or turns it on for this project. A person runs it.
+
+**No permission file.** prep used to write `.claude/settings.json` and
+`.codex/config.toml`, and merge into a settings file that already stood. It
+stopped: following two vendors' permission schemas cost more than a file a
+person edits by hand from the second day on was worth (`docs/adr/0031`). A
+project starts at each harness's own defaults, and files an earlier prep wrote
+are left where they are.
 
 ## Where the reasoning lives
 

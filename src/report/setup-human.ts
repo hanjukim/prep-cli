@@ -1,58 +1,26 @@
-import { addedCount } from "../merge.ts";
-import { installCommand, serverInstallCommand } from "../plugins.ts";
+import {
+  enableCommand,
+  installCommand,
+  serverInstallCommand,
+  typeMarkers,
+} from "../plugins.ts";
 import type {
   Artifact,
-  CodexArtifact,
   GuidanceArtifact,
   HandoffResult,
-  HarnessPresence,
-  MergePlan,
   NextStep,
   NextStepId,
   PluginRecommendation,
   PluginRef,
   PluginStatus,
-  Preset,
-  RuleSection,
-  SettingsArtifact,
   SetupOutcome,
-  SettingsDocument,
 } from "../types.ts";
 import { handoffRows } from "./handoff.ts";
 import { INDENT, join, pad, widest } from "./layout.ts";
 
 export type SetupHumanReportInput = {
   outcome: SetupOutcome;
-  /** The table detection ran against. Marker names for the report live here, not on the outcome. */
-  presets: readonly Preset[];
 };
-
-const SECTIONS: readonly (readonly [string, RuleSection])[] = [
-  // Denied first: it is the section that holds whatever the rest allows.
-  ["Denying", "deny"],
-  ["Allowing", "allow"],
-  ["Asking", "ask"],
-];
-
-/** Marks a rule the merge adds. Kept rules sit under a blank column, so the new ones stand out on their own. */
-const ADDED = "+ ";
-const KEPT = "  ";
-
-function count(rules: readonly string[]): string {
-  return `${rules.length} rule${rules.length === 1 ? "" : "s"}`;
-}
-
-/** The one sentence that says what happened to one file and why. Every artifact, every status, ends on one. */
-function reason(artifact: Artifact, detected: readonly string[]): string {
-  switch (artifact.kind) {
-    case "claude-settings":
-      return settingsReason(artifact, detected);
-    case "codex-config":
-      return codexReason(artifact);
-    default:
-      return guidanceReason(artifact);
-  }
-}
 
 /**
  * What each file of prose is for, in the one sentence its section opens on.
@@ -74,8 +42,11 @@ const GUIDANCE: Record<GuidanceArtifact["kind"], { wrote: string; already: strin
   },
 };
 
-/** What happened to a file of prose. Either it is written whole, or it is left alone. */
-function guidanceReason(artifact: GuidanceArtifact): string {
+/**
+ * The one sentence that says what happened to one file and why. Every artifact,
+ * every status, ends on one: either the file is written whole, or it is left alone.
+ */
+function reason(artifact: Artifact): string {
   const wording = GUIDANCE[artifact.kind];
 
   switch (artifact.status) {
@@ -88,182 +59,11 @@ function guidanceReason(artifact: GuidanceArtifact): string {
   }
 }
 
-/** What happened to the Codex permission file. Written where none stood, never merged into (ADR-0007). */
-function codexReason(artifact: CodexArtifact): string {
-  switch (artifact.status) {
-    case "applied":
-      return `Wrote ${artifact.path} — the same baseline, in the form Codex reads.`;
-    case "planned":
-      return `Dry run. Nothing was written to ${artifact.path}. It would hold the same baseline, in the form Codex reads.`;
-    default:
-      return `${artifact.path} is already there — prep does not merge TOML, so it was left exactly as it was.`;
-  }
-}
-
-/**
- * The profile, and every path it closes.
- *
- * Shown for the same reason the permission rules are shown: this is the file's
- * whole content, and a security baseline nobody reads back is a baseline nobody
- * checked. The two lists are printed as one, since a person reading them is
- * asking what is closed, not which table it sits in.
- */
-function codexRules(lines: string[], artifact: CodexArtifact): void {
-  const config = artifact.config;
-  if (config === null) return;
-
-  lines.push("", "Starting mode", INDENT + `${config.extends}, approval ${config.approvalPolicy}`);
-
-  const denied = [...config.workspace, ...config.outside];
-  if (denied.length === 0) return;
-
-  lines.push("", `Denying (${denied.length})`);
-  for (const path of denied) lines.push(INDENT + path);
-}
-
-/**
- * The one thing that can make this file a lie.
- *
- * A `sandbox_mode` in the config sends Codex back to its older sandbox and the
- * permission profile is never read. Somebody who saw prep report a Codex file
- * and nothing else would believe the paths are closed when none of them is.
- */
-function sandbox(lines: string[], artifact: CodexArtifact): void {
-  if (!artifact.sandboxMode) return;
-
-  lines.push(
-    INDENT +
-      "! it sets sandbox_mode — Codex reads that instead of any permission profile, so nothing here is closed by prep.",
-  );
-}
-
-function settingsReason(artifact: SettingsArtifact, detected: readonly string[]): string {
-  // With no type recognised, only the shared half went in — say which half, so
-  // an empty Detected section does not read as a failure.
-  const scope = detected.length === 0 ? " Only the type-independent rules went in." : "";
-
-  switch (artifact.status) {
-    case "applied":
-      return `Wrote ${artifact.path} — edit it yourself for anything the preset does not cover.${scope}`;
-    case "planned":
-      if (artifact.plan === null) {
-        return `Dry run. Nothing was written to ${artifact.path}. It would hold:${scope}`;
-      }
-      return plannedMergeReason(artifact.path, artifact.plan);
-    case "merged":
-      return `Merged into ${artifact.path}. Everything that was already there was kept.`;
-    case "declined":
-      return `Left ${artifact.path} exactly as it was. Nothing was written.`;
-    case "skipped":
-      return `${artifact.path} already covers this baseline — nothing to add.`;
-  }
-}
-
-/** What a merge would do, before anybody has approved it. */
-function plannedMergeReason(settingsPath: string, plan: MergePlan): string {
-  const added = addedCount(plan);
-  const parts = [added > 0 ? `adds ${added} rule${added === 1 ? "" : "s"}` : ""];
-
-  // Named in the same sentence as the rules, because it is the same write. A
-  // plugin entry that only showed up further down would land on a file whose
-  // one-line summary said nothing about it.
-  if (plan.addedPlugins.length > 0) {
-    const count = plan.addedPlugins.length;
-    parts.push(`turns on ${count} plugin${count === 1 ? "" : "s"}`);
-  }
-
-  if (plan.conflicts.length > 0) {
-    parts.push(`leaves ${plan.conflicts.length} value${plan.conflicts.length === 1 ? "" : "s"} to decide`);
-  }
-
-  const what = parts.filter(Boolean).join(" and ");
-
-  return `${settingsPath} already exists. Merging ${what}. Nothing has been written yet.`;
-}
-
-/**
- * The permission block, with every rule the merge would add marked.
- *
- * The marker column only appears for a merge. A fresh write has nothing to
- * compare against, so every rule there is new and a column of markers would say
- * nothing.
- */
-function rules(lines: string[], settings: SettingsDocument, plan: MergePlan | null): void {
-  const permissions = settings.permissions;
-  const mark = (section: RuleSection, rule: string) => {
-    if (plan === null) return "";
-    return plan.added[section].includes(rule) ? ADDED : KEPT;
-  };
-
-  lines.push("", "Starting mode", INDENT + (plan === null ? "" : KEPT) + permissions.defaultMode);
-
-  for (const [title, section] of SECTIONS) {
-    const held = permissions[section];
-    if (held.length === 0) continue;
-
-    const added = plan?.added[section] ?? [];
-    const heading =
-      added.length > 0 ? `${title} (${held.length} · +${added.length})` : `${title} (${held.length})`;
-
-    lines.push("", heading);
-    for (const rule of held) lines.push(INDENT + mark(section, rule) + rule);
-  }
-}
-
-/** The file's plugin block, as prep reads it back off a document it does not own every key of. */
-function enabledPlugins(settings: SettingsDocument): Record<string, unknown> {
-  const enabled = settings.enabledPlugins;
-  return typeof enabled === "object" && enabled !== null && !Array.isArray(enabled)
-    ? (enabled as Record<string, unknown>)
-    : {};
-}
-
-/**
- * The plugins the file turns on, with the ones this merge adds marked.
- *
- * Shown inside the settings section rather than beside the recommendations,
- * because this is a change to a file: it belongs in the diff a person approves,
- * next to the rules that land in the same write.
- *
- * An entry standing at `false` is shown as it stands. It is somebody having
- * switched a plugin off, and a diff that quietly left it out would be a diff of
- * something other than the file.
- */
-function enabling(lines: string[], settings: SettingsDocument, plan: MergePlan | null): void {
-  const entries = Object.entries(enabledPlugins(settings));
-  if (entries.length === 0) return;
-
-  const added = plan?.addedPlugins ?? [];
-  const heading =
-    added.length > 0 ? `Enabling (${entries.length} · +${added.length})` : `Enabling (${entries.length})`;
-
-  lines.push("", heading);
-  for (const [id, value] of entries) {
-    const mark = plan === null ? "" : added.includes(id) ? ADDED : KEPT;
-    lines.push(INDENT + mark + id + (value === true ? "" : " (off)"));
-  }
-}
-
-/** The values a merge cannot settle on its own. Shown apart, because each one is a question. */
-function conflicts(lines: string[], plan: MergePlan): void {
-  if (plan.conflicts.length === 0) return;
-
-  const width = widest(plan.conflicts.map((conflict) => conflict.key));
-
-  lines.push("", `To decide (${plan.conflicts.length})`);
-  for (const conflict of plan.conflicts) {
-    lines.push(
-      INDENT + join(`! ${pad(conflict.key, width)}`, `yours: ${conflict.existing}`, `preset: ${conflict.preset}`),
-    );
-  }
-}
-
 /**
  * What the harness still owes.
  *
- * Shown on every run, whatever prep did with the settings file: the two are
- * unrelated, and a run that wrote nothing is exactly when a person most needs
- * to be told what is left.
+ * Shown on every run, whatever prep wrote: a run that wrote nothing is exactly
+ * when a person most needs to be told what is left.
  *
  * The rows are shared with chef, which reads the same check. What is setup's
  * own is the sentence under them — this run has just written files, so it can
@@ -290,7 +90,6 @@ function handoff(lines: string[], results: readonly HandoffResult[]): void {
  * commands, this carries the sentences, and no wording can reach the JSON.
  */
 const NEXT: Record<NextStepId, string> = {
-  approve: "in a terminal — see the merge and answer it",
   harness: "writes the guidance prep does not",
   "install-harness": "no agent CLI here — install one first, then come back",
   chef: "reports what this machine still owes you",
@@ -320,40 +119,12 @@ function next(lines: string[], steps: readonly NextStep[]): void {
 }
 
 /**
- * One file's own section: why prep acted or did not, then what it wrote.
- *
- * Every artifact gets the same shape, so a run producing one reads exactly as a
- * run producing four, only shorter.
- */
-function artifactSection(lines: string[], artifact: Artifact, detected: readonly string[]): void {
-  lines.push("", reason(artifact, detected));
-
-  if (artifact.kind === "codex-config") {
-    sandbox(lines, artifact);
-    codexRules(lines, artifact);
-    return;
-  }
-
-  // A file of prose has nothing to list under its sentence. It is a shape with
-  // no decisions in it, and printing headings back would say nothing the
-  // sentence has not.
-  if (artifact.kind !== "claude-settings") return;
-
-  // A declined artifact shows no rules on purpose: nothing changed, so a list of
-  // them would only read as though something had.
-  if (artifact.settings && artifact.status !== "declined") {
-    rules(lines, artifact.settings, artifact.plan);
-    enabling(lines, artifact.settings, artifact.plan);
-    if (artifact.plan) conflicts(lines, artifact.plan);
-  }
-}
-
-/**
  * How each recommendation is worded, and who acts on it.
  *
- * The whole boundary is in these three lines: a plugin the machine does not hold
- * is a person's to install, one it holds is prep's to turn on, and one the
- * settings file already names is nobody's — it has been answered.
+ * A plugin the machine does not hold is a person's to install, one it holds is
+ * a person's to turn on, and one the settings file already names is nobody's —
+ * it has been answered. prep runs neither command and writes no entry
+ * (docs/adr/0031).
  *
  * None of them says anything about the language server the plugin points at.
  * That is a second, independent half, and it gets its own line where it is
@@ -361,7 +132,7 @@ function artifactSection(lines: string[], artifact: Artifact, detected: readonly
  */
 const PLUGIN: Record<PluginStatus, { mark: string; note: (plugin: PluginRef) => string }> = {
   missing: { mark: "✗", note: (plugin) => `not installed — ${installCommand(plugin)}` },
-  installed: { mark: "+", note: () => "installed on this machine — prep turns it on here" },
+  installed: { mark: "+", note: (plugin) => `installed, not turned on here — ${enableCommand(plugin)}` },
   answered: { mark: "✓", note: () => "already in this project's settings" },
 };
 
@@ -399,39 +170,6 @@ function plugins(lines: string[], recommendations: readonly PluginRecommendation
   }
 }
 
-/**
- * Which harness this run wrote for, and which it did not.
- *
- * Left out entirely when every harness is installed, because then the file list
- * is the whole answer and a row per harness would be furniture. It appears
- * exactly when something is absent — which is when the artifact list has a hole
- * in it that nothing else on the screen explains.
- */
-function harnesses(lines: string[], rows: readonly HarnessPresence[]): void {
-  if (rows.every((row) => row.installed)) return;
-
-  const width = widest(rows.map((row) => row.id));
-
-  lines.push("", `Harnesses (${rows.length})`);
-  for (const row of rows) {
-    lines.push(INDENT + join(`${row.installed ? "✓" : "✗"} ${pad(row.id, width)}`, harnessNote(row)));
-  }
-}
-
-/**
- * What one harness row says on the right.
- *
- * The row that matters is the third: not installed and written for anyway. That
- * is the fallback, and saying it out loud is the difference between a person
- * knowing the project carries a Claude baseline and a person assuming prep read
- * their machine and agreed with it.
- */
-function harnessNote(row: HarnessPresence): string {
-  if (row.installed) return "installed — its files are written here";
-  if (row.covered) return "not installed — written for anyway, so the project is not left without a baseline";
-  return "not installed — its files are left out";
-}
-
 /** Whether one recommendation leaves nothing to say: the file has answered, and the server is there. */
 function settled(recommendation: PluginRecommendation): boolean {
   return recommendation.status === "answered" && recommendation.server.status === "installed";
@@ -453,8 +191,9 @@ function mark(recommendation: PluginRecommendation, own: string): string {
 
 /** Detected types first, then a section per file, then what is owed, then what to run. */
 export function renderSetupHuman(input: SetupHumanReportInput): string {
-  const { outcome, presets } = input;
-  const markerOf = new Map(presets.map((preset) => [preset.type, preset.marker]));
+  const { outcome } = input;
+  const markers = typeMarkers();
+  const markerOf = new Map(markers.map((entry) => [entry.type, entry.marker]));
 
   const lines: string[] = [`prep setup · ${outcome.root}`];
 
@@ -466,53 +205,20 @@ export function renderSetupHuman(input: SetupHumanReportInput): string {
     }
   } else {
     // Naming the markers it looked for turns "nothing happened" into something actionable.
-    const markers = presets.map((preset) => preset.marker).join(", ");
-    lines.push("", "Detected (0)", INDENT + `– no ${markers}`);
+    const looked = markers.map((entry) => entry.marker).join(", ");
+    lines.push("", "Detected (0)", INDENT + `– no ${looked}`);
   }
 
-  for (const artifact of outcome.artifacts) artifactSection(lines, artifact, outcome.detected);
+  // One sentence per file. A file of prose has nothing to list under it: it is a
+  // shape with no decisions in it, and printing headings back would say nothing
+  // the sentence has not.
+  for (const artifact of outcome.artifacts) lines.push("", reason(artifact));
 
-  // After the files, because it answers for the list of them rather than for any
-  // one file: what is here decided which of them were written at all.
-  harnesses(lines, outcome.harnesses);
-
-  // Between the files and the handoff, because that is where it sits: one of
-  // these is prep's to write and the rest are somebody else's to install.
+  // Between the files and the handoff, because that is where it sits: the files
+  // are what prep wrote, and these are what somebody still has to run.
   plugins(lines, outcome.plugins);
   handoff(lines, outcome.handoff);
   next(lines, outcome.next);
-
-  return lines.join("\n") + "\n";
-}
-
-/**
- * The last thing shown before a merge is written.
- *
- * Counts, not rules: the diff above already listed them one by one, and what is
- * still worth checking at the moment of writing is the file being touched and
- * the values that came out of the questions.
- */
-export function renderMergeSummary(settingsPath: string, settings: SettingsDocument): string {
-  const permissions = settings.permissions;
-  const turnedOn = Object.values(enabledPlugins(settings)).filter((value) => value === true).length;
-
-  const titles = ["Starting mode", ...SECTIONS.map(([title]) => title), "Enabling"];
-  const width = widest(titles);
-
-  const lines = [
-    `Will write to ${settingsPath}`,
-    INDENT + join(pad("Starting mode", width), permissions.defaultMode),
-  ];
-
-  for (const [title, section] of SECTIONS) {
-    lines.push(INDENT + join(pad(title, width), count(permissions[section])));
-  }
-
-  // Only where there is one. A line reading "0 plugins" on every merge would be
-  // furniture, and this is the last thing read before a file changes.
-  if (turnedOn > 0) {
-    lines.push(INDENT + join(pad("Enabling", width), `${turnedOn} plugin${turnedOn === 1 ? "" : "s"}`));
-  }
 
   return lines.join("\n") + "\n";
 }

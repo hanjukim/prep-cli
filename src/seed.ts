@@ -49,9 +49,8 @@ a prompt can.
 /**
  * Seeds the guidance file, or plans it.
  *
- * The same split the settings file draws, for the same reason: with no file
- * there, prep writes, because there is nothing of anybody's to lose. With one
- * there — under either name — prep does not touch it and does not propose a
+ * With no file there, prep writes, because there is nothing of anybody's to
+ * lose. With one there — under either name — prep does not touch it and does not propose a
  * second. One project has one instruction file, and picking which of two wins is
  * not prep's decision to make.
  */
@@ -96,8 +95,8 @@ export const CLAUDE_MD_POINTER = "@AGENTS.md\n";
  * nothing is reported — the same file cannot be two of this run's artifacts.
  *
  * A CLAUDE.md that exists beside an AGENTS.md is left as it is, unread — what
- * somebody else's instruction file says is theirs to decide, and appending to
- * prose is not a merge (docs/adr/0007).
+ * somebody else's instruction file says is theirs to decide, and prep changes
+ * no file that already stands.
  */
 export function pointerArtifact(
   root: string,
