@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join } from "node:path/posix";
 
 import { GUIDANCE_FILES } from "./handoff.ts";
 import type { GuidanceArtifact, SetupFs } from "./types.ts";

@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname } from "node:path";
+import { dirname } from "node:path/posix";
 
 import { HandoffError, checkHandoff } from "./handoff.ts";
 import { nextSteps } from "./next.ts";

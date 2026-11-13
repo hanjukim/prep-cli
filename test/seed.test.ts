@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join } from "node:path/posix";
 
 import { checkHandoff } from "../src/handoff.ts";
 import { AGENTS_SEED, CLAUDE_MD_POINTER } from "../src/seed.ts";
